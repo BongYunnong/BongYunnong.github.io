@@ -98,6 +98,8 @@ toc: true
 - Github 대신 Gitlab을 사용하는 경우도 있다.
 - GithubDesktop을 아예 사용하지 않는 경우도 있고(Git bash로 관리) SourceTree나 SVN을 활용하는 협업 방식도 있다.
 
+
+
 [github]: https://github.com
 [githubDesktop]: https://desktop.github.com/
 
