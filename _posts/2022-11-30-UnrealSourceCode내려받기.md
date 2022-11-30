@@ -54,9 +54,11 @@ toc: true
     3. 파일 탐색기를 통해 언리얼 소스를 다운받은 폴더로 접근하여 "Setup.bat" 파일 실행
         - 이 작업을 통해 엔진에 필요한 바이너리 콘텐츠를 다운받고 언리얼을 위한 요구사항을 맞출 수 있게 된다.
         - 만약 경고창이 뜨면 More Info -> Run Anyway 클릭
+        - ![화면 캡처 2022-11-30 020256](https://user-images.githubusercontent.com/11372675/204832523-503e282e-32b1-4779-b9e8-5fa0639f363a.png)
     4. "GenerateProjectFiles.bat" 파일 실행
         - 엔진을 위한 프로젝트 파일을 생성
         - 만약 에러가 발생하면 VisualStudio Installer의 개별 구성요소에서 .Net Framework (알맞는 버전)을 설치하면 됨
+        - ![화면 캡처 2022-11-30 020226](https://user-images.githubusercontent.com/11372675/204832384-a69f4493-8b2c-4302-84c0-21e177f6c3cb.png)
     5. "UE5.sln" 파일을 실행
         - Visual Studio가 실행
             - solution configuration을 "Development Editor"로 설정
@@ -66,6 +68,8 @@ toc: true
     6. Visual Studio로 solution을 실행하고, UE5를 startup Project로 설정한 후(우클릭하면 메뉴에 존재) Debug -> Start new instance를 클릭하면 언리얼 엔진 실행
         - F5를 눌러도 실행 가능
     7. 야호! 드디어 끝!
+	- ![화면 캡처 2022-11-30 101955](https://user-images.githubusercontent.com/11372675/204832678-cd915203-4618-4390-804b-a6b8de08f252.png)
+
 
 ## 권장 세팅
 - solution configuration 메뉴 폭 늘리기
@@ -117,6 +121,18 @@ toc: true
 ## 주의!
 - 혹시나 언리얼 경로에 한글 이름의 폴더가 있다면.. 영어로 바꾸던가 하자
     - 경험상 프로그램을 설치, 빌드할 때 항상 문제가 되는 것이 한글 이름의 폴더 때문이었던 때가 많았음
+
+## 주의!
+- 만약 생성한 uproject 파일을 실행하려했는데 연결할 프로그램을 못 찾는다면..?
+	- ![화면 캡처 2022-11-30 231759](https://user-images.githubusercontent.com/11372675/204833060-813f0a76-da3d-44ff-9bb8-29ff072509c3.png)
+	- 일단 Epic Game Launcher 설치
+			- https://store.epicgames.com/en-US/download
+	- C:\Program File(x86)\Epic Games\Launcher\Engine\Binaries\Win64 경로의 UnrealVersionSelector.exe복사
+		- ![화면 캡처 2022-11-30 232034](https://user-images.githubusercontent.com/11372675/204833200-83f62180-b77c-4460-8f66-1f0f1fb36687.png)
+	- 소스엔진 다운받은 경로\Engine\Binaries\Win64 경로에 붙여넣기
+	- UnrealVersionSelector.exe실행
+		- ![화면 캡처 2022-11-30 232128](https://user-images.githubusercontent.com/11372675/204833292-2821b51c-8cf7-4781-abad-12cd0f509595.png)
+	- 이제 uproject파일을 실행하면 정상적으로 작동한다.
 
 ## ETC
 - 빌드를 완료하면 프로젝트의 'Engine\Binaries\' 경로에서 주요 툴을 확인 가능
