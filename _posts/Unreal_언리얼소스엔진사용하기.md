@@ -56,12 +56,12 @@ toc: true
         - 만약 경고창이 뜨면 More Info -> Run Anyway 클릭
     4. "GenerateProjectFiles.bat" 파일 실행
         - 엔진을 위한 프로젝트 파일을 생성
-        - 만약 에러가 발생하면 VisualStudio Installer의 개별 구성요소에서 .Net Framework 4.6.2도 설치해야 나중에 에러가 발생하지 않음
+        - 만약 에러가 발생하면 VisualStudio Installer의 개별 구성요소에서 .Net Framework (알맞는 버전)을 설치하면 됨
     5. "UE5.sln" 파일을 실행
         - Visual Studio가 실행
             - solution configuration을 "Development Editor"로 설정
             - solution platform을 Win64로 설정
-            - F5키를 누르면 전체 빌드
+            - UE5 프로젝트를 시작 프로젝트로 설정한 후 F5키를 누르면 전체 빌드
             - 매우매우매우매우 오래걸림
     6. Visual Studio로 solution을 실행하고, UE5를 startup Project로 설정한 후(우클릭하면 메뉴에 존재) Debug -> Start new instance를 클릭하면 언리얼 엔진 실행
         - F5를 눌러도 실행 가능
@@ -113,6 +113,10 @@ toc: true
 
 - 문서 참고
     - https://docs.unrealengine.com/4.27/ko/ProductionPipelines/DevelopmentSetup/VisualStudioSetup/
+
+## 주의!
+- 혹시나 언리얼 경로에 한글 이름의 폴더가 있다면.. 영어로 바꾸던가 하자
+    - 경험상 프로그램을 설치, 빌드할 때 항상 문제가 되는 것이 한글 이름의 폴더 때문이었던 때가 많았음
 
 ## ETC
 - 빌드를 완료하면 프로젝트의 'Engine\Binaries\' 경로에서 주요 툴을 확인 가능
