@@ -1,7 +1,7 @@
 ---
 title: "Github Desktop 사용하기"
 permalink: /posts/git/
-excerpt: "소프트스킬 독후감"
+excerpt: "Github Desktop 사용하기"
 last_modified_at: 2022-11-29T23:33:00-04:00
 toc: true
 ---
