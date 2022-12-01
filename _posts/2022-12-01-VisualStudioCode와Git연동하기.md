@@ -1,4 +1,4 @@
- ---
+---
 title: "VisualStudioCode와 Git 연동하기"
 permalink: /posts/Git/
 excerpt: "VisualStudioCode와 Git 연동하기"
@@ -26,10 +26,10 @@ toc: true
 ## Add, Commit, Push
 - Add
 	- 일단 로컬 저장소에서 변경사항이 있으면 SourceControl 탭에서 확인 가능
-	- ![image](https://user-images.githubusercontent.com/11372675/204951387-20bd53ad-90ee-41b2-9dc2-226f27a901ff.png)
-	- ![image](https://user-images.githubusercontent.com/11372675/204951750-31cb07b1-a9c2-40b0-9b0b-191871b32353.png)
+		- ![image](https://user-images.githubusercontent.com/11372675/204951387-20bd53ad-90ee-41b2-9dc2-226f27a901ff.png)
+	- 변경 파일 Stage에 올리기
+		- ![image](https://user-images.githubusercontent.com/11372675/204951750-31cb07b1-a9c2-40b0-9b0b-191871b32353.png)
 - commit
-	- ![image](https://user-images.githubusercontent.com/11372675/204951662-0b2dd385-660c-4314-bcf2-7e2eb0eea3d8.png)
 	- ![image](https://user-images.githubusercontent.com/11372675/204951825-6e3577ae-cc2b-4fee-9e13-6516e5bb5273.png)
 - push
 	- ![image](https://user-images.githubusercontent.com/11372675/204951879-7c02b099-835e-44c5-b9d4-0c79359e26f2.png)
