@@ -1,0 +1,78 @@
+# FVector에 3D Widget 속성 넣기
+``` C++
+UPROPERTY(EditAnywhere, Meta=(MakeEditWidget=true))
+FVector targetLocation;
+```
+- ![image](https://user-images.githubusercontent.com/11372675/205005657-cca8479f-8d65-4ec5-ba0b-5fd4332cccf6.png)
+
+# 언리얼의 좌표 단위
+- cm를 사용함
+
+# Normalize와 SafeNormal의 차이
+- Normalize는 벡터를 변형함
+- SafeNormal은 새로운 벡터를 만듦
+- 벡터 자체를 변형하지 않는 것이 좋은 습관(버그찾기 힘듦)
+
+# Local Position을 Global Position으로 변경하기
+``` C++
+FVector GlobalTargetLocation = GetTransform().TransformPosition(TargetLocation);
+```
+
+# NAT
+- 처음에 IP를 설계할 때 이렇게 인터넷이 활성화 될 줄 몰랐음
+    - IPv4를 사용하다가 IPv6를 새로 개발함
+    - 하지만 IPv4를 사용하던 이전 버전과의 호환성 때문에 모든 곳에서 교체가 이루어지지는 않았음
+- 위의 문제를 해결하기 위해서, 글로벌 IP와 로컬 IP를 나눔
+    - 일반적으로 ISP(Internet Service Provider - ex. SK, KT, LG유플러스...)가 라우터에 글로벌 IP 주소를 제공
+    - 한 네트워크 안의 여러 기기는 로컬 IP 주소를 가짐
+- NAT(Network Address Translation)
+    - 글로벌 IP 주소를 로컬 IP 주소로 변환함
+    - 주의할 점은, 외부로 나가는 연결을 해줄 장치가 없으면 글로벌 주소에서 하나의 특정 장치로 이동하는게 불가능함
+- 하마치 소프트웨어를 활용
+    - 하마치를 통해 글로벌 네트워크에 걸친 LAN을 만들 수 있음
+    - 즉, 가상 로컬 네트워크를 만듦
+
+# Hamachi 사용
+- 5명까지 무료
+
+- www.vpn.net
+    - ![image](https://user-images.githubusercontent.com/11372675/205015839-084d62ec-1ca8-4ef7-8dc9-7ec72cec1799.png)
+- 다운로드
+    - ![image](https://user-images.githubusercontent.com/11372675/205015746-b1a003cc-4e95-4034-8e8d-a6c441cb8283.png)
+- Sign Up
+- Hamachi 실행
+- 전원 켜기
+- Sign in
+- Create New Network
+    - ![image](https://user-images.githubusercontent.com/11372675/205016201-99484ea2-0cf2-4ae0-b4b0-c829b5fb8894.png)
+    - network Id와 암호 설정
+- 다른 컴퓨터에서 접속
+    - Join an existing network
+    - network Id와 암호 입력
+- 접속 확인
+    - ![image](https://user-images.githubusercontent.com/11372675/205017038-53bc82b2-2da8-4f68-93fd-174ffcb929ea.png)
+
+## 언리얼에서 사용하기
+- 한 컴퓨터에서 Server를 열기
+    > "엔진경로" "uproject경로" -server -log
+- 다른 컴퓨터에서는 Hamachi에서 서버의 IPv4 주소를 복사하여 cmd에서 아래 명령어 수행
+    > "엔진경로" "uproject경로" IPv4주소 -game -log
+- 하마치로 테스트를 하려면 다른 플레이어가 내 프로젝트 파일을 가지고있어야함 -> github을 사용할 수 있겠다.
+
+# UPROPERTY와 가비지 컬렉터
+- 어떤 변수를 UPROPERTY로 설정을 해주어야 메모리를 관리해줄 UObject로 생각하고 가비지 컬렉터가 실행된다.
+
+# UFUNCTION
+- 동적 이벤트는 UFUNCTION()을 사용해야함
+
+
+# nullpointer 처리하기
+- nullpointer는 에디터를 아예 종료시켜버리는 위험이 크다.
+- 자동적으로 기본적으로 null검사하는 방법
+- 텍스트 편집기 nullret 기능
+    ``` C++
+    if(!ensure(TriggerVolume!=nullptr)) return;
+    ```
+
+# Visual Studio 단축키
+- Ctrl + K , O : 이전 파일로 돌아가기

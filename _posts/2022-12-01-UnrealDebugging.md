@@ -16,13 +16,37 @@ UE_LOG(LogTEmp, Log, TEXT("원하는 메시지 입력"))
     - ![image](https://user-images.githubusercontent.com/11372675/205002640-59308178-4173-4200-a3b5-36062a8cc380.png)
 
 ## GEngine->AddOnScreenebugMessage
-``` C++
-GEngine->AddOnScreenDebugMessage(-1, 1.0f, FColor::Blue, TEXT("원하는 메시지"));
-```
+- 원형
+    ``` C++
+    void AddOnScreenDebugMessage
+    (
+        uint64 key,
+        float TimeToDisplay,
+        FColor DisplayColor,
+        const FString& DebugMessage,
+        bool bNewerOnTop,
+        const FVector2D& TextScale
+    )
+    ```
+    - key : -1을 넘기면 기존 메시지를 덮어쓰지 않는 것, 0이면 덮어쓰는 것
+    - TimeToDisplay : 얼마나 오래 메시지를 띄울 것인가
+    - DisplayColor : 메시지 색상
+    - DebugMessage : 출력할 메시지
+- 사용
+    ``` C++
+    GEngine->AddOnScreenDebugMessage(-1, 1.0f, FColor::Blue, TEXT("원하는 메시지"));
+    ```
 - ![image](https://user-images.githubusercontent.com/11372675/205003333-38bee5be-6e13-45b3-833e-f468628705af.png)
 
 - 게임을 플레이하면 좌측 상단에서 확인 가능
     - ![image](https://user-images.githubusercontent.com/11372675/205003146-1c0f2003-50b7-4187-88df-d5305d6f7daf.png)
+
+- tip) GEngine에 마우스 커서를 가져다대면 아래와 같은 설명이 나온다.
+    > *Global engine pointer. Can be 0 so don't use without checking
+    - 그렇다고 말씀하시니 null 체크를 하도록 하자
+    ``` C++
+    if(GEngine) GEngine->AddOnScreenDebugMessage(-1, 1.0f, FColor::Blue, TEXT("원하는 메시지"));
+    ```
 
 
 ## 중단점으로 디버깅 해보자
