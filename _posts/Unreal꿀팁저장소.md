@@ -76,3 +76,35 @@ FVector GlobalTargetLocation = GetTransform().TransformPosition(TargetLocation);
 
 # Visual Studio 단축키
 - Ctrl + K , O : 이전 파일로 돌아가기
+
+# CPP에서 Blueprint 찾기
+- FindClassFinder라는 함수를 사용하자
+- GameInstance 클래스에서 BP_PlatformTrigger를 찾아보자
+    - PuzzlePlatformsGameInstance.cpp
+        ``` C++
+        #include "UObject/ConstructorHelpers.h"
+        #include "PlatformTrigger.h"
+        UPuzzlePlatformsGameInstance::UPuzzlePlatformsGameInstance(const FObjectInitializer& ObjectInitializer)
+        {
+            ConstructorHelpers::FClassFinder<APlatformTrigger> PlatformTriggerBPClass(TEXT("/Game/PuzzlePlatforms/BP_PlatformTrigger"));
+            if (PlatformTriggerBPClass.Class != nullptr) {
+                UE_LOG(LogTemp, Warning, TEXT("FClassFinder founded %s"), *PlatformTriggerBPClass.Class->GetName());
+            }
+            UE_LOG(LogTemp, Warning, TEXT("GameInsatnce Constructor"));
+        }
+        ```
+    - 결과
+        - ![image](https://user-images.githubusercontent.com/11372675/205316554-1c4f2129-47df-4093-a352-aaa40e8f4441.png)
+        - 잘 찾네!
+- tip) 게임모드 생성자를 보면 이미 FClassFinder를  사용하고있었음을 알고있다.
+    ``` C++
+    APuzzlePlatformsGameMode::APuzzlePlatformsGameMode()
+    {
+        static ConstructorHelpers::FClassFinder<APawn> PlayerPawnBPClass(TEXT("/Game/ThirdPerson/Blueprints/BP_ThirdPersonCharacter"));
+        if (PlayerPawnBPClass.Class != NULL)
+        {
+            DefaultPawnClass = PlayerPawnBPClass.Class;
+        }
+    }
+    ```
+    - BP_ThirdPersonCharacter를 찾아서 DefaultPawnClass로 지정하는 코드
