@@ -60,3 +60,11 @@ toc: true
         - ![image](https://user-images.githubusercontent.com/11372675/205447420-ea128861-4cf6-40cc-b19a-bf9f82796cff.png)
     - 좌측 History 탭을 선택하면 지금까지의 Commit 내역도 확인할 수 있다.
         - ![image](https://user-images.githubusercontent.com/11372675/205447491-3eccc555-81f7-4b5b-be5d-887526a924ea.png)
+
+## otherbranch가 작업한 내역
+### 작업1
+- 작업1-1
+### 작업2
+- 작업2-1
+- 작업2-2
+
