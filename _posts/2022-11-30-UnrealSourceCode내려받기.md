@@ -1,7 +1,7 @@
 ---
 title: "Unreal Source Engine 내려받기"
-permalink: /posts/Unreal/
-excerpt: "Unreal Source Engine 내려받기"
+permalink: /posts/unreal/downloadunrealsourceengine
+excerpt: "How to download Unreal Source Engine"
 last_modified_at: 2022-11-30T00:31:00-04:00
 toc: true
 ---

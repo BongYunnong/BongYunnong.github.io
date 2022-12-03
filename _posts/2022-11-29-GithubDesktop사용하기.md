@@ -1,22 +1,13 @@
 ---
 title: "Github Desktop 사용하기"
-permalink: /posts/git/
-excerpt: "Github Desktop 사용하기"
+permalink: /posts/git/usinggithubdesktop
+excerpt: "How to use Github Desktop"
 last_modified_at: 2022-11-29T23:33:00-04:00
 toc: true
 ---
 
 # Git
-## Git이란?
-- 컴퓨터 파일의 변경사항을 추적하는 버전 관리 시스템(VCS:Version Control System)이다.
-    - 간단하게 이야기하면 파일, 폴더를 동기화시켜주는 소프트웨어이다.
-
-- 이게 왜 필요할까?
-    - 프로그램을 만들다보면 데이터가 날라가는 경우도 있고, 중간에 잘못 판단해서 이전 버전으로 롤백해야하는 상황이 생긴다. 이때 Git을 사용하면 이전에 백업을 해둔 버전으로 돌아갈 수 있기에 안전하게 프로그램을 개발할 수 있다.
-
-- Repository(저장소) : Git으로 버전 관리하는 디렉토리
-- local repository(로컬 저장소) : 로컬 환경(개인 PC)에서 관리되는 Git 저장소
-- remote repository(원격 저장소) : 외부 환경(Github 등)에서 관리되는 Git 저장소
+- https://bongyunnong.github.io/posts/git/installgit
 
 # Github
 - Github는 Git저장소를 관리할 수 있도록 클라우드 서버 기반으로 구현된 호스팅 서비스이다. 

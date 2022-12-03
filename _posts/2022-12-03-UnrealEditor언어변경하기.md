@@ -1,6 +1,6 @@
 ---
 title: "언리얼 에디터 언어 변경하기"
-permalink: /posts/Git/
+permalink: /posts/unreal/changingunrealeditorlanguage
 excerpt: "How to Change Unreal Editor's Language"
 last_modified_at: 2022-12-03T023:06:00-04:00
 toc: true

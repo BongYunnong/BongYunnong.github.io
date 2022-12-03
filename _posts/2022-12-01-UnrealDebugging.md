@@ -1,7 +1,7 @@
 ---
 title: "언리얼 디버깅"
-permalink: /posts/Unreal/
-excerpt: "언리얼 디버깅"
+permalink: /posts/unreal/debugginginunreal
+excerpt: "How to debug in Unreal"
 last_modified_at: 2022-12-01T15:37:00-04:00
 toc: true
 ---

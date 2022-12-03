@@ -1,7 +1,7 @@
 ---
 title: "VisualStudio와 Git 연동하기"
-permalink: /posts/Git/
-excerpt: "VisualStudio와 Git 연동하기"
+permalink: /posts/git/linkingvisualstudiowithgit
+excerpt: "How to link visualStudio with git"
 last_modified_at: 2022-12-02T019:26:00-04:00
 toc: true
 ---

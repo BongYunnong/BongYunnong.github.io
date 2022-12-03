@@ -1,7 +1,7 @@
 ---
 title: "언리얼 CPP 파일 삭제"
-permalink: /posts/Unreal/
-excerpt: "언리얼 CPP 파일 삭제"
+permalink: /posts/unreal/removeunrealcppfile
+excerpt: "How to remove Unreal CPP file"
 last_modified_at: 2022-12-01T14:46:00-04:00
 toc: true
 ---
