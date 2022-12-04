@@ -2,7 +2,7 @@
 title: "VisualStudioCode와 Git 연동하기"
 permalink: /posts/git/linkingvisualstudiocodewithgit
 excerpt: "How to link visualStuioCode with git"
-last_modified_at: 2022-12-01T010:20:00-04:00
+last_modified_at: 2022-12-01T10:20:00-04:00
 toc: true
 ---
 
