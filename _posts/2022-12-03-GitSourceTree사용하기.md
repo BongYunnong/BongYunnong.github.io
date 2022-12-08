@@ -66,16 +66,20 @@ toc: true
     - ![image](https://user-images.githubusercontent.com/11372675/205447601-079e7f3d-81d9-4a9d-be0c-8f9312fb54be.png)
 - 원하는 파일을 스테이지에 올리기(Add)'
     - ![image](https://user-images.githubusercontent.com/11372675/205447645-f01a87ee-3bbc-413b-9061-3a5a3d212ac6.png)
-    - 이것은 GitBash의 아래 명령어와 같은 역할을 함
+    - stage에 올리는 것의 의미는, 현재 상태를 기억하고싶은 파일을 선택하는 것.
+	- 이것은 GitBash의 아래 명령어와 같은 역할을 함
         > $ git add .
 - 스테이지에 올려진 파일을 커밋으로 만들기(commit)
     - ![image](https://user-images.githubusercontent.com/11372675/205447832-0a807a07-8047-42a8-ac83-613b8e4f0d34.png)
     - 커밋 메시지 입력하고 "커밋" 버튼 클릭하기
+		- 커밋 메시지는 해당 커밋의 간단한 설명
+		- tip) 첫 줄은 제목, 한 줄 띄고 세번째 줄부터 본문의 역할을 함
     - 이것은 GitBash의 아래 명령어와 같은 역할을 함
         > $ git commit -m "원하는 메시지"
     - 커밋을 하면 history에서 다양한 정보를 확인 가능
         - ![image](https://user-images.githubusercontent.com/11372675/205447951-7d74e795-990a-4638-b673-6301fc03c9d7.png)
         - 방금 커밋한 내역의 날짜, 작성자, 커밋id, 변경 내용 등 확인 가능
+	- 즉, 일종의 체크포인트의 역할을 한다.
 - 로컬 변경내역 원격 저장소에 업로드하기(push)
     - 누가 봐도 "Push"버튼을 눌러야 할 것 같음
     - ![image](https://user-images.githubusercontent.com/11372675/205447994-6d47b5d9-e618-45cc-9eac-863453eb05cc.png)

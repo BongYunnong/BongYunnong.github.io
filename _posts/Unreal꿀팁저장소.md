@@ -73,6 +73,10 @@ FVector GlobalTargetLocation = GetTransform().TransformPosition(TargetLocation);
     ``` C++
     if(!ensure(TriggerVolume!=nullptr)) return;
     ```
+# NULL과 nullptr차이
+- C++11이전 버전에서는 NULL을 포인터가 아닌 정수 0과 동일하게 여김
+- int n = NULL은 되지만 int n = nullptr은 에러가 발생(포인터로 인식을하려하기 때문)
+- 최근 실무에서는 NULL대신 nullptr로 초기화를 많이 하는 추세이다.
 
 # Visual Studio 단축키
 - Ctrl + K , O : 이전 파일로 돌아가기
