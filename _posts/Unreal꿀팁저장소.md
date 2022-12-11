@@ -112,3 +112,15 @@ FVector GlobalTargetLocation = GetTransform().TransformPosition(TargetLocation);
     }
     ```
     - BP_ThirdPersonCharacter를 찾아서 DefaultPawnClass로 지정하는 코드
+
+# Steamworks SDK(software development kit)
+- Steam은 Valve사의 게임 플랫폼
+- 게임 유통 뿐 아니라 도전과제, 멀티플레이 등의 통합 기능도 제공한다.
+- 링크 : https://partner.steamgames.com/
+- Steam 계정으로 log-in
+- ![image](https://user-images.githubusercontent.com/11372675/206842822-fd505530-096a-4afd-a603-047eb59748cf.png)
+- 약관 확인하고 sdk 다운로드
+- 원하는 프로젝트의 Encrypted폴더에 압축 풀기
+- 원하는프로젝트폴더\sdk\steamworksexample\SteamworksExample.sln실행
+    - ![image](https://user-images.githubusercontent.com/11372675/206843097-f437bf5f-3208-475b-ad99-9cd6e6e774f1.png)
+- 솔루션 빌드
