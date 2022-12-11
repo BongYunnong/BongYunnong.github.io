@@ -78,11 +78,17 @@ toc: true
     1. UnrealVS.vsix 파일 찾고 설치
         - C:\Users\tiger\Documents\UnrealEngine\Engine\Extras\UnrealVS\VS2022
     2. Instsaller가 올바른 VS 버전을 대상으로 하는지 확인 후 설치
+        - ![image](https://user-images.githubusercontent.com/11372675/206908447-3907506d-a063-468a-9648-d87dd5e03547.png)
     3. VS 실행시키고 Tools > Extensions and Updates...에서 Extension 확인 가능
     4. View > Toolbars > Unreal VS 활성화
+        - ![image](https://user-images.githubusercontent.com/11372675/206908557-fff62664-695c-4435-8f36-8392c275c84b.png)
     5. Toolbar 우클릭 > Customize... > Commands 탭 > Toolbar에서 UnrealVS 선택 > Add Commands... 선택
     6. Category에서 Extension 선택 > Build startup Project 선택 > 확인
+        - ![image](https://user-images.githubusercontent.com/11372675/206908606-9ceb311c-4f36-47aa-948e-31c8e7324425.png)
     7. 6번 방법으로 Compile Sningle File추가
+    8. 설정 완료
+        - ![image](https://user-images.githubusercontent.com/11372675/206908639-e1d82915-a448-4d04-bb13-d38312413aff.png)
+
 
 
 # 기타
