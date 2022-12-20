@@ -224,6 +224,8 @@
         SessionSettings->bAllowJoinViaPresence = true; // Steam서비스는 지역에 맞는 사용자와 연결을 해줌
         SessionSettings->bShouldAdvertise = true;       // 다른 플레이어들이 이 Session을 찾을 수 있도록 함
         SessionSettings->bUsesPresence = true;
+        SessionSettings->bUseLobbiesIfAvailable = true;	// 최근 언리얼 버전에서는 이거 없으면 세션을 못 찾는다 함
+
         const ULocalPlayer* LocalPlayer = GetWorld()->GetFirstLocalPlayerFromController();
         OnlineSessionInterface->CreateSession(*LocalPlayer->GetPreferredUniqueNetId(),NAME_GameSession, *SessionSettings);
     }
@@ -256,3 +258,212 @@
     }
     ```
 - 만약 .Net관련 문제가 있으면 VS Installer > Individual Components >  .NET Core 3.1 Runtime(LTS)를 설치하자
+
+## Find Session
+- 알맞은 Query(질의)를 통해 원하는 Session 찾기
+- MenuSystemCharacter.h
+    ``` C++
+    public:
+        UFUNCTION(BlueprintCallable)
+        void JoinGameSession();
+        void OnFindSessionsComplete(bool bWasSuccessful);
+    private:
+	    FOnFindSessionsCompleteDelegate FindSessionsCompleteDelegate;
+	    TSharedPtr<FOnlineSessionSearch> SessionSearch;
+    ```
+- MenuSystemCharacter.h
+    ``` C++
+    AMenuSystemCharacter::AMenuSystemCharacter() :
+        CreateSessionCompleteDelegate(FOnCreateSessionCompleteDelegate::CreateUObject(this, &ThisClass::OnCreateSessionComplete)),
+        FindSessionsCompleteDelegate(FOnFindSessionsCompleteDelegate::CreateUObject(this, &ThisClass::OnFindSessionsComplete))
+    {
+        ...
+    }
+    void AMenuSystemCharacter::JoinGameSession()
+    {
+        if (!OnlineSessionInterface.IsValid())
+            return;
+
+        OnlineSessionInterface->AddOnFindSessionsCompleteDelegate_Handle(FindSessionsCompleteDelegate);
+
+        SessionSearch = MakeShareable(new FOnlineSessionSearch());
+        SessionSearch->MaxSearchResults = 10000;
+        SessionSearch->bIsLanQuery = false;
+	    SessionSearch->QuerySettings.Set(SEARCH_PRESENCE, true, EOnlineComparisonOp::Equals);
+
+        const ULocalPlayer* LocalPlayer = GetWorld()->GetFirstLocalPlayerFromController();
+        OnlineSessionInterface->FindSessions(*LocalPlayer->GetPreferredUniqueNetId(), SessionSearch.ToSharedRef());
+    }
+
+    void AMenuSystemCharacter::OnFindSessionsComplete(bool bWasSuccessful)
+    {
+        for (auto Result : SessionSearch->SearchResults)
+        {
+            FString Id = Result.GetSessionIdStr();
+            FString User = Result.Session.OwningUserName;
+
+            if (GEngine)
+            {
+                GEngine->AddOnScreenDebugMessage(
+                    -1,
+                    15.f,
+                    FColor::Cyan,
+                    FString::Printf(TEXT("Id : %s, User : %s"), *Id, *User)
+                );
+            }
+        }
+    }
+    ```
+
+## Lobby
+- 새로운 Level 만들기 "Lobby"
+- 이제는 원하는 Session으로 이동할것임
+- MenuSystemCharacter.h
+    ``` C++
+    protected:
+    	void OnJoinSessionComplete(FName SessionName, EOnJoinSessionCompleteResult::Type Result);
+    private:
+        FOnJoinSessionCompleteDelegate JoinSessionCompleteDelegate;
+    ```
+- MenuSystemCharacter.cpp
+    ``` C++
+    AMenuSystemCharacter::AMenuSystemCharacter() :
+        CreateSessionCompleteDelegate(FOnCreateSessionCompleteDelegate::CreateUObject(this, &ThisClass::OnCreateSessionComplete)),
+        FindSessionsCompleteDelegate(FOnFindSessionsCompleteDelegate::CreateUObject(this, &ThisClass::OnFindSessionsComplete)),
+        JoinSessionCompleteDelegate(FOnJoinSessionCompleteDelegate::CreateUObject(this, &ThisClass::OnJoinSessionComplete))
+    {
+        ...
+    }
+    void AMenuSystemCharacter::CreateGameSession()
+    {
+        ...
+	    SessionSettings->Set(FName("MatchType"), FString("FreeForAll"), EOnlineDataAdvertisementType::ViaOnlineServiceAndPing);
+    }
+
+    void AMenuSystemCharacter::OnCreateSessionComplete(FName SessionName, bool bWasSuccessful)
+    {    
+    	if (bWasSuccessful)
+        {
+            ...
+            UWorld* World = GetWorld();
+            if (World)
+            {
+                World->ServerTravel(FString("/Game/ThirdPerson/Maps/Lobby?listen"));
+            }
+        }
+        else
+            ...
+    }
+    void AMenuSystemCharacter::OnFindSessionsComplete(bool bWasSuccessful)
+    {
+        if(!OnlineSessionInterface.IsValid())
+            return;
+
+        for (auto Result : SessionSearch->SearchResults)
+        {
+            ...
+            FString MatchType;
+            Result.Session.SessionSettings.Get(FName("MatchType"), MatchType);
+            ...
+            if (MatchType == FString("FreeForAll"))
+            {
+                if (GEngine)
+                {
+                    GEngine->AddOnScreenDebugMessage(
+                        -1,
+                        15.f,
+                        FColor::Cyan,
+                        FString::Printf(TEXT("Joining Match Type: %s"), *MatchType)
+                    );
+                }
+                OnlineSessionInterface->AddOnJoinSessionCompleteDelegate_Handle(JoinSessionCompleteDelegate);
+                const ULocalPlayer* LocalPlayer = GetWorld()->GetFirstLocalPlayerFromController();
+                OnlineSessionInterface->JoinSession(*LocalPlayer->GetPreferredUniqueNetId(), NAME_GameSession, Result);
+            }
+        }
+    }
+    void AMenuSystemCharacter::OnJoinSessionComplete(FName SessionName, EOnJoinSessionCompleteResult::Type Result)
+    {
+        if (!OnlineSessionInterface.IsValid())
+            return;
+
+        FString Address;
+        if (OnlineSessionInterface->GetResolvedConnectString(NAME_GameSession, Address))
+        {
+            if (GEngine)
+            {
+                GEngine->AddOnScreenDebugMessage(
+                    -1,
+                    15.f,
+                    FColor::Yellow,
+                    FString::Printf(TEXT("Connect String : %s"), *Address)
+                );
+            }
+
+            APlayerController* PlayerController = GetGameInstance()->GetFirstLocalPlayerController();
+            if (PlayerController)
+            {
+                PlayerController->ClientTravel(Address, ETravelType::TRAVEL_Absolute);
+            }
+        }
+    }
+    ```
+
+## Plugin
+- Plugin
+    - Collection of code and data
+    -  Easily enable and disable
+    - Per-Project basis
+    - Runtime gameplay functionality
+    - Editor functionality
+    - Made up of one or more moudules
+- Modules
+    - A distinct unit of C++ code
+    - Contains a build file(.Build.cs)
+    - Code only(no uassets)
+    - Encapsulation(each module has a distinct purpose)
+    - Organization
+    - Our project itself is a module
+- .uproject파일을 열어보면 사용중인 Plugin을 확인할 수 있음
+- plugin 만들기
+    - Edit > Plugin > Add > Blank 선택
+    - Author와 Description 설정
+    - Create Plugin
+    - Content Browser에서 Show Plugin Content 옵션을 활성화하면 볼 수 있음
+    - Visual Studio에도 프로젝트 아래의 Plugins 폴더에 해당 plugin 디렉토리가 생성된 것 확인 가능
+- MultiplayerSessions.uplugin
+    ``` 
+    ...
+    "Modules": [
+		{
+			"Name": "MultiplayerSessions",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
+		}
+	],
+	"Plugins": [
+		{
+			"Name": "OnlineSubsystem",
+			"Enabled": true
+		},
+		{
+			"Name": "OnlineSubsystemSteam",
+			"Enabled": true
+		}
+	]
+    ```
+    - OnlineSubsystem와 OnlineSubsystemSteam 플러그인 사용하겠다고 명시
+- MultiplayerSessions.Build.cs
+    - OnlineSubSystem과 OnlineSubsystsemSteam 빌드하겠다고 명시
+    ``` C#
+    PublicDependencyModuleNames.AddRange(
+    new string[]
+    {
+        "Core",
+        "OnlineSubsystem",
+        "OnlineSubsystemSteam",
+        // ... add other public dependencies that you statically link with here ...
+    }
+    );
+    ```
+
