@@ -467,3 +467,415 @@
     );
     ```
 
+## Creating Our own Online Subsystem
+- GameInstance
+    - Spawned at game creation
+    - Not destroyed until the game is shut down
+    - Persists between levels
+- UGameInstanceSubsystem을 상속받아서 우리만의 subsystem을 만들 수 있다.
+    - https://docs.unrealengine.com/4.27/en-US/ProgrammingAndScripting/Subsystems/
+    - gameInstanceSubsystem을 만들면 UGameInstance가 만들어질 때 자동으로 만들어지고, Initialize, DeInitialize될 것이다.
+        - UGameInstance가 Shutdown되면 자동으로 garbageCollect처리 됨
+- MultiplayerSessionsSubsystem클래스 만들기
+    - ![image](https://user-images.githubusercontent.com/11372675/208901985-65193872-52e8-4202-919f-c48e5cbeced5.png)
+    - ContentBrowser에 보면 MultiplayerSessions Content와 MultiplayerSessions C++ Classes 폴더가 만들어진 것 확인 가능
+    - 빨간줄이 뜬다면? : Editor, VS 닫고 MultiplayerSessions 폴더의 Binaries, Intermediate, Saved를 지우고 Generate VisualStudioProjects    
+        - .uproject를 다시 실행해보면 rebuild할거냐고 물음 -> 확인하면 빨간 줄 없어짐
+- MultiplayerSessionsSubsystem.h
+    ``` C++
+    #include "Interfaces/OnlineSessionInterface.h"
+    ...
+    public:
+        UMultiplayerSessionsSubsystem();
+    protected:
+    private:
+        IOnlineSessionPtr SessionInterface;
+    ```
+- MultiplayerSessionsSubsystem.cpp
+    ``` C++
+    #include "MultiplayerSessionsSubsystem.h"
+    #include "OnlineSubsystem.h"
+    UMultiplayerSessionsSubsystem::UMultiplayerSessionsSubsystem()
+    {
+        IOnlineSubsystem* Subsystem = IOnlineSubsystem::Get();
+        if (Subsystem)
+        {
+            SessionInterface = Subsystem->GetSessionInterface();
+        }
+    }
+    ```
+
+## Session interface functions
+1. Delegate를 만들고, 적절한 콜백함수를 binding
+2. Delegate를 list에 add (ex. AddOnCreateSessionCompleteDelegate_Handle())
+3. 위의 예시같은 경우, FDelegateHandle을 return함
+4. Delegate를 List에서 clear함 (ex. ClearOnCreateSessionCompleteDelegate_Handle())
+
+- MultiplayerSessionsSubsystem.h
+    ``` C++
+    public:
+        // To handle session functionality. The Menu class will call these
+        void CreateSession(int32 NumPublicConnections, FString MatchType);
+        void FindSessions(int32 MaxSearchResults);
+        void JoinSession(const FOnlineSessionSearchResult& SessionResult);
+        void DestroySession();
+        void StartSession();
+    protected:
+        // Internal callbacks for the delegates we'll add to the Online Session Interface delegate list
+        // These don't need to be called outside this class
+        void OnCreateSessionComplete(FName SessionName, bool bWasSuccessful);
+        void OnFindSessionsComplete(bool bWasSuccessful);
+        void OnJoinSessionComplete(FName SessionName, EOnJoinSessionCompleteResult::Type Result);
+        void OnDestroySessionComplete(FName SessionName, bool bWasSuccessful);
+        void OnStartSessionComplete(FName SessionName, bool bWasSuccessful);
+    private:
+        // To add to the Online Sesison Interface delegate list
+        // we'll bind our MultiplayerSessionsSubsystem internal callbacks to these
+        FOnCreateSessionCompleteDelegate CreateSessionCompleteDelegate;
+        FDelegateHandle CreateSessionCompleteDelegateHandle;
+        FOnFindSessionsCompleteDelegate FindSessionsCompleteDelegate;
+        FDelegateHandle FindSessionsCompleteDelegateHandle;
+        FOnJoinSessionCompleteDelegate JoinSessionCompleteDelegate;
+        FDelegateHandle JoinSessionCompleteDelegateHandle;
+        FOnDestroySessionCompleteDelegate DestroySessionCompleteDelegate;
+        FDelegateHandle DestroySessionCompleteDelegateHandle;
+        FOnStartSessionCompleteDelegate StartSessionCompleteDelegate;
+        FDelegateHandle StartSessionCompleteDelegateHandle;
+    ```
+- MultiplayerSessionsSubsystem.cpp
+    ``` C++
+    UMultiplayerSessionsSubsystem::UMultiplayerSessionsSubsystem() :
+        CreateSessionCompleteDelegate(FOnCreateSessionCompleteDelegate::CreateUObject(this, &ThisClass::OnCreateSessionComplete)),
+        FindSessionsCompleteDelegate(FOnFindSessionsCompleteDelegate::CreateUObject(this, &ThisClass::OnFindSessionsComplete)),
+        JoinSessionCompleteDelegate(FOnJoinSessionCompleteDelegate::CreateUObject(this, &ThisClass::OnJoinSessionComplete)),
+        DestroySessionCompleteDelegate(FOnDestroySessionCompleteDelegate::CreateUObject(this, &ThisClass::OnDestroySessionComplete)),
+        StartSessionCompleteDelegate(FOnStartSessionCompleteDelegate::CreateUObject(this, &ThisClass::OnStartSessionComplete))
+
+    {
+        IOnlineSubsystem* Subsystem = IOnlineSubsystem::Get();
+        if (Subsystem)
+        {
+            SessionInterface = Subsystem->GetSessionInterface();
+        }
+    }
+    ```
+
+- UserWidget을 상속받아 Menu라는 클래스 생성
+- MultiplayerSessions.Build.cs
+    ``` C#
+    PublicDependencyModuleNames.AddRange(
+    new string[]
+    {
+        "Core",
+        "OnlineSubsystem",
+        "OnlineSubsystemSteam",
+        "UMG",
+        "Slate",
+        "SlateCore"
+        // ... add other public dependencies that you statically link with here ...
+    }
+    );
+    ```
+- Menu.h
+    ``` C++
+    #pragma once
+    #include "CoreMinimal.h"
+    #include "Blueprint/UserWidget.h"
+    #include "Menu.generated.h"
+    UCLASS()
+    class MULTIPLAYERSESSIONS_API UMenu : public UUserWidget
+    {
+        GENERATED_BODY()
+    public:
+        UFUNCTION(BlueprintCallable)
+        void MenuSetup();
+    };
+    ```
+- Menu.cpp
+    ``` C++
+    #include "Menu.h"
+    void UMenu::MenuSetup()
+    {
+        AddToViewport();
+        SetVisibility(ESlateVisibility::Visible);
+        bIsFocusable = true;
+
+        UWorld* World = GetWorld();
+        if (World)
+        {
+            APlayerController* PlayerController = World->GetFirstPlayerController();
+            if (PlayerController)
+            {
+                FInputModeUIOnly InputModeData;
+                InputModeData.SetWidgetToFocus(TakeWidget());
+                InputModeData.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+                PlayerController->SetInputMode(InputModeData);
+                PlayerController->SetShowMouseCursor(true);
+            }
+        }
+    }
+    ```
+- MultiplayerSessions Content에 UserWidget 클래스의 WBP_Menu 블루프린트 생성
+    - ![image](https://user-images.githubusercontent.com/11372675/208922276-81cb7b48-90b4-4619-9acb-52ce08baf448.png)
+    - Class Setting에서 Parent Class를 Menu로 설정
+    - test를 위해 Level Blueprint에서 BeginPlay > Create WBP Menu Widget > Menu Setup 연결 후, 플레이하면 보임
+
+## Accessing our Subsystem
+1. Menu 클래스가 SubsystemFunction을 호출
+2. MultiplayerSessionsSubsystem이 SessionInterfaceFunction을 호출
+3. SessionInterface와는 MultiplayerSessionsSubsystem의 Session Interface Delegates가 binding되어있음
+4. Callback 함수 호출
+5. Subsystem Delegate를 통해 Menu class에 결과를 알려줘야함
+- 이렇게 하면 좋은 점은 MultipalyerSessionsSubsystem은 Menu를 몰라도 됨
+- 비슷하게, SessionInterface는 MultiplayerSessionsSubsystem을 몰라도 됨
+- Menu.h
+    ``` C++
+    public:
+        UFUNCTION(BlueprintCallable)
+	    void MenuSetup(int32 NumberOfPublicConnections = 4, FString TypeOfMatch = FString(TEXT("FreeForAll")));
+    protected:
+        virtual bool Initialize() override;
+	    virtual void OnLevelRemovedFromWorld(ULevel* InLevel, UWorld* INWorld) override;
+    private:
+        UPROPERTY(meta=(BindWidget))
+        class UButton* HostButton;
+        UPROPERTY(meta = (BindWidget))
+        UButton* JoinButton;
+
+        UFUNCTION()
+        void HostButtonClicked();
+        UFUNCTION()
+        void JoinButtonClicked();
+
+	    void MenuTearDown();
+
+        // the subsystem designed to handle all online session functionality
+        class UMultiplayerSessionsSubsystem* MultiplayerSessionsSubsystem;
+
+        int32 NumPublicConnections{ 4 };
+        FString MatchType{ TEXT("FreeForAll") };
+    ```
+    - menu=(BindWidget) 옵션을 통해 C++과 BP를 연동할 수 있음
+        - 변수 이름이랑 WBP의 위젯 이름이랑 똑같아야함
+- Menu.cpp
+    ``` C++
+    #include "Menu.h"
+    #include "Components/Button.h"
+    #include "MultiplayerSessionsSubsystem.h"
+    void UMenu::MenuSetup(int32 NumberOfPublicConnections, FString TypeOfMatch)
+    {
+        NumPublicConnections = NumberOfPublicConnections;
+        MatchType = TypeOfMatch;
+
+        AddToViewport();
+        SetVisibility(ESlateVisibility::Visible);
+        bIsFocusable = true;
+
+        UWorld* World = GetWorld();
+        if (World)
+        {
+            APlayerController* PlayerController = World->GetFirstPlayerController();
+            if (PlayerController)
+            {
+                FInputModeUIOnly InputModeData;
+                InputModeData.SetWidgetToFocus(TakeWidget());
+                InputModeData.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+                PlayerController->SetInputMode(InputModeData);
+                PlayerController->SetShowMouseCursor(true);
+            }
+        }
+
+        UGameInstance* GameInstance = GetGameInstance();
+        if (GameInstance)
+        {
+            MultiplayerSessionsSubsystem = GameInstance->GetSubsystem<UMultiplayerSessionsSubsystem>();
+        }
+    }
+    bool UMenu::Initialize()
+    {
+        if (!Super::Initialize())
+        {
+            return false;
+        }
+        if (HostButton)
+        {
+            HostButton->OnClicked.AddDynamic(this, &UMenu::HostButtonClicked);
+        }
+        if (JoinButton)
+        {
+            JoinButton->OnClicked.AddDynamic(this, &UMenu::JoinButtonClicked);
+        }
+        return true;
+    }
+    void UMenu::OnLevelRemovedFromWorld(ULevel* InLevel, UWorld* INWorld)
+    {
+        MenuTearDown();
+        Super::OnLevelRemovedFromWorld(InLevel, INWorld);
+    }
+    void UMenu::HostButtonClicked()
+    {
+        if (MultiplayerSessionsSubsystem)
+        {
+		    MultiplayerSessionsSubsystem->CreateSession(NumPublicConnections, MatchType);
+            UWorld* World = GetWorld();
+            if (World)
+            {
+                World->ServerTravel("/Game/ThirdPerson/Maps/Lobby?listen");
+            }
+        }
+    }
+    void UMenu::JoinButtonClicked()
+    {
+        if (GEngine)
+        {
+            GEngine->AddOnScreenDebugMessage(
+                -1,
+                15.f,
+                FColor::Yellow,
+                FString(TEXT("Join Button Clicked"))
+            );
+        }
+    }
+    void UMenu::MenuTearDown()
+    {
+        RemoveFromParent();
+        UWorld* World = GetWorld();
+        if (World)
+        {
+            APlayerController* PlayerController = World->GetFirstPlayerController();
+            if (PlayerController)
+            {
+                FInputModeGameOnly InputModeData;
+                PlayerController->SetInputMode(InputModeData);
+                PlayerController->SetShowMouseCursor(false);
+            }
+        }
+    }
+    ```
+- MultiplayerSessionsSubsystem.h
+    ``` C++
+    private:
+    	TSharedPtr<FOnlineSessionSettings> LastSessionSettings;
+    ```
+- MultiplayerSessionsSubsystem.cpp
+    - MenuSystemCharacter에서 Test로 넣어놨던 Settings를 참고하자
+    ``` C++
+    #include "OnlineSessionSettings.h"
+    ...
+    void UMultiplayerSessionsSubsystem::CreateSession(int32 NumPublicConnections, FString MatchType)
+    {
+        if (!SessionInterface.IsValid())
+        {
+            return;
+        }
+        auto ExistingSession = SessionInterface->GetNamedSession(NAME_GameSession);
+        if (ExistingSession != nullptr)
+        {
+            SessionInterface->DestroySession(NAME_GameSession);
+        }
+        // Store the delegate in a FDelegateHandle so we can later remove it from the delegate list
+        CreateSessionCompleteDelegateHandle = SessionInterface->AddOnCreateSessionCompleteDelegate_Handle(CreateSessionCompleteDelegate);
+
+        LastSessionSettings = MakeShareable(new FOnlineSessionSettings());
+        LastSessionSettings->bIsLANMatch = IOnlineSubsystem::Get()->GetSubsystemName() == "NULL" ? true : false;
+        LastSessionSettings->NumPublicConnections = NumPublicConnections;
+        LastSessionSettings->bAllowJoinInProgress = true;
+        LastSessionSettings->bAllowJoinViaPresence = true;
+        LastSessionSettings->bShouldAdvertise = true;
+        LastSessionSettings->bUsesPresence = true;
+        LastSessionSettings->bUseLobbiesIfAvailable = true;	// 최근 언리얼 버전에서는 이거 있어야함
+        LastSessionSettings->Set(FName("MatchType"), MatchType, EOnlineDataAdvertisementType::ViaOnlineServiceAndPing);
+
+        const ULocalPlayer* LocalPlayer = GetWorld()->GetFirstLocalPlayerFromController();
+        if (!SessionInterface->CreateSession(*LocalPlayer->GetPreferredUniqueNetId(), NAME_GameSession, *LastSessionSettings))
+        {
+            // Create Session 실패하면 Delegate List Clear
+            SessionInterface->ClearOnCreateSessionCompleteDelegate_Handle(CreateSessionCompleteDelegateHandle);
+        }
+    }
+    ```
+
+## Callbacks to our subsystem functions
+- MultilayerSessionsSubsystem.h
+    ```C++
+    // Declaring our own custom delegates for the menu class to bind callbacks to
+    DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FMultiplayerOnCreateSessionComplete, bool, bWasSuccessful);
+    ...
+    public:
+        // our own custom delegates for the Menu class to bind callbacks to
+        FMultiplayerOnCreateSessionComplete MultiplayerOnCreateSessionComplete;
+    ``` 
+    - MULTICAST : 다수의 클래스가 멤버 함수들을 delegate에 binding할 수 있다는 의미
+    - DYNAMIC : delegate가 serialize될 수 있고, BP Graph로 읽거나 쓸 수 있다는 의미 (Event Dispatcher라고 부름)
+- Menu.h
+    ``` C++
+    protected:
+        // Callbacks for th custom delegates on the MultiplayerSessionsSubsystem
+        UFUNCTION()
+        void OnCreateSession(bool bWasSuccessful);
+    ```
+- Menu.cpp
+    ``` C++
+    void UMenu::MenuSetup(int32 NumberOfPublicConnections, FString TypeOfMatch)
+    {
+        ...
+        if (MultiplayerSessionsSubsystem)
+        {
+            MultiplayerSessionsSubsystem->MultiplayerOnCreateSessionComplete.AddDynamic(this, &ThisClass::OnCreateSession);
+        }
+    }
+    void UMenu::OnCreateSession(bool bWasSuccessful)
+    {
+        if (bWasSuccessful)
+        {
+            if (GEngine)
+            {
+                GEngine->AddOnScreenDebugMessage(
+                    -1,
+                    15.f,
+                    FColor::Yellow,
+                    FString(TEXT("Session Created Successfully"))
+                );
+                UWorld* World = GetWorld();
+                if (World)
+                {
+                    World->ServerTravel("/Game/ThirdPerson/Maps/Lobby?listen");
+                }
+            }
+        }
+    }
+    void UMenu::HostButtonClicked()
+    {
+        if (MultiplayerSessionsSubsystem)
+        {
+            MultiplayerSessionsSubsystem->CreateSession(NumPublicConnections, MatchType);
+        }
+    }
+    ```
+- MultiplaerSessionsSubsystem.cpp
+    - Create Session이 성공했는지, 아닌지를 통해 Broadcast
+    ``` C++
+    void UMultiplayerSessionsSubsystem::CreateSession(int32 NumPublicConnections, FString MatchType)
+    {
+        ...
+        if (!SessionInterface->CreateSession(*LocalPlayer->GetPreferredUniqueNetId(), NAME_GameSession, *LastSessionSettings))
+        {
+            SessionInterface->ClearOnCreateSessionCompleteDelegate_Handle(CreateSessionCompleteDelegateHandle);
+
+            // Broadcast our own custom delegate
+            MultiplayerOnCreateSessionComplete.Broadcast(false);
+        }
+    }
+    ...
+    void UMultiplayerSessionsSubsystem::OnCreateSessionComplete(FName SessionName, bool bWasSuccessful)
+    {
+        if (SessionInterface)
+        {
+            SessionInterface->ClearOnCreateSessionCompleteDelegate_Handle(CreateSessionCompleteDelegateHandle);
+        }
+        // Broadcast our own custom delegate
+        MultiplayerOnCreateSessionComplete.Broadcast(bWasSuccessful);
+    }
+    ```
+- tip) Delegate를 만들었으면 Binaries, Intermediate 지우고 Generate Visual Studio Project를 하는 것 추천
+- .uproject LaunchGame하면 STEAM에 접속한거 확인 + Host하면 callback이 되어서 servertravel과 함께 로그도 찍히는 것 확인
