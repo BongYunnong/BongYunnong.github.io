@@ -879,3 +879,389 @@
     ```
 - tip) Delegate를 만들었으면 Binaries, Intermediate 지우고 Generate Visual Studio Project를 하는 것 추천
 - .uproject LaunchGame하면 STEAM에 접속한거 확인 + Host하면 callback이 되어서 servertravel과 함께 로그도 찍히는 것 확인
+
+
+## More subsystem delegates
+- MultiplayerSessionsSubsystem.h
+    ``` C++
+    // Declaring our own custom delegates for the menu class to bind callbacks to
+    DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FMultiplayerOnCreateSessionComplete, bool, bWasSuccessful);
+    DECLARE_MULTICAST_DELEGATE_TwoParams(FMultiplayerOnFindSessionsComplete, const TArray<FOnlineSessionSearchResult>& SessionResults, bool bWasSuccessful);
+    DECLARE_MULTICAST_DELEGATE_OneParam(FMultiplayerOnJoinSessionComplete, EOnJoinSessionCompleteResult::Type Result);
+    DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FMultiplayerOnDestroySessionComplete, bool, bWasSuccessful);
+    DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FMultiplayerOnStartSessionComplete, bool, bWasSuccessful);
+    ...
+    public:
+        // our own custom delegates for the Menu class to bind callbacks to
+        FMultiplayerOnCreateSessionComplete MultiplayerOnCreateSessionComplete;
+        FMultiplayerOnFindSessionsComplete MultiplayerOnFindSessionsComplete;
+        FMultiplayerOnJoinSessionComplete MultiplayerOnJoinSessionComplete;
+        FMultiplayerOnDestroySessionComplete MultiplayerOnDestroySessionComplete;
+        FMultiplayerOnStartSessionComplete MultiplayerOnStartSessionComplete;
+    private:
+    	TSharedPtr<FOnlineSessionSearch> LastSessionSearch;
+    ```
+    - findSession은 블루프린트에서 활용할 일 없을것이기에 DYNAMIC을 빼고 delegate를 만듦
+    - tip) multicast delegate 매크로에는 컴마를 사용하지 않네
+- Menu.h
+    ``` C++
+    #include "Interfaces/OnlineSessionInterface.h"
+    protected:
+        // Callbacks for th custom delegates on the MultiplayerSessionsSubsystem
+        UFUNCTION()
+        void OnCreateSession(bool bWasSuccessful);
+        void OnFindSessions(const TArray<FOnlineSessionSearchResult>& SessionResults, bool bWasSuccessful);
+        void OnJoinSession(EOnJoinSessionCompleteResult::Type Result);
+        UFUNCTION()
+        void OnDestroySession(bool bWasSuccessful);
+        UFUNCTION()
+        void OnStartSession(bool bWasSuccessful);
+    ```
+- Menu.cpp
+    ``` C++
+    #include "OnlineSessionSettings.h"
+    ...
+    void UMenu::MenuSetup(int32 NumberOfPublicConnections, FString TypeOfMatch)
+    {
+        ...
+        if (MultiplayerSessionsSubsystem)
+        {
+            MultiplayerSessionsSubsystem->MultiplayerOnCreateSessionComplete.AddDynamic(this, &ThisClass::OnCreateSession);
+            MultiplayerSessionsSubsystem->MultiplayerOnFindSessionsComplete.AddUObject(this, &ThisClass::OnFindSessions);
+            MultiplayerSessionsSubsystem->MultiplayerOnJoinSessionComplete.AddUObject(this, &ThisClass::OnJoinSession);
+            MultiplayerSessionsSubsystem->MultiplayerOnDestroySessionComplete.AddDynamic(this, &ThisClass::OnDestroySession);
+            MultiplayerSessionsSubsystem->MultiplayerOnStartSessionComplete.AddDynamic(this, &ThisClass::OnStartSession);
+        }
+    }
+    void UMenu::JoinButtonClicked()
+    {
+        if (MultiplayerSessionsSubsystem)
+        {
+            MultiplayerSessionsSubsystem->FindSessions(10000);
+        }
+    }
+    void UMenu::OnFindSessions(const TArray<FOnlineSessionSearchResult>& SessionResults, bool bWasSuccessful)
+    {
+        if (MultiplayerSessionsSubsystem == nullptr)
+            return;
+
+        for (auto Result : SessionResults)
+        {
+            FString SettingsValue;
+            Result.Session.SessionSettings.Get(FName("MatchType"), SettingsValue);
+            if (SettingsValue == MatchType)
+            {
+                MultiplayerSessionsSubsystem->JoinSession(Result);
+                return;
+            }
+        }
+    }
+    void UMenu::OnJoinSession(EOnJoinSessionCompleteResult::Type Result)
+    {
+        IOnlineSubsystem* Subsystem = IOnlineSubsystem::Get();
+        if (Subsystem)
+        {
+            IOnlineSessionPtr SessionInterface = Subsystem->GetSessionInterface();
+            if (SessionInterface.IsValid())
+            {
+                FString Address;
+                SessionInterface->GetResolvedConnectString(NAME_GameSession, Address);
+
+                APlayerController* PlayerController = GetGameInstance()->GetFirstLocalPlayerController();
+                if (PlayerController)
+                {
+                    PlayerController->ClientTravel(Address, ETravelType::TRAVEL_Absolute);
+                }
+            }
+        }
+    }
+    ```
+- MultiplayerSessionsSubsystem.cpp
+    ``` C++
+    void UMultiplayerSessionsSubsystem::FindSessions(int32 MaxSearchResults)
+    {
+        if (!SessionInterface.IsValid())
+        {
+            return;
+        }
+        FindSessionsCompleteDelegateHandle = SessionInterface->AddOnFindSessionsCompleteDelegate_Handle(FindSessionsCompleteDelegate);
+        LastSessionSearch = MakeShareable(new FOnlineSessionSearch());
+        LastSessionSearch->MaxSearchResults = MaxSearchResults;
+        LastSessionSearch->bIsLanQuery = IOnlineSubsystem::Get()->GetSubsystemName() == "NULL" ? true : false;
+        LastSessionSearch->QuerySettings.Set(SEARCH_PRESENCE, true, EOnlineComparisonOp::Equals);
+
+        const ULocalPlayer* LocalPlayer = GetWorld()->GetFirstLocalPlayerFromController();
+        if (!SessionInterface->FindSessions(*LocalPlayer->GetPreferredUniqueNetId(), LastSessionSearch.ToSharedRef()))
+        {
+            SessionInterface->ClearOnFindSessionsCompleteDelegate_Handle(FindSessionsCompleteDelegateHandle);
+            MultiplayerOnFindSessionsComplete.Broadcast(TArray<FOnlineSessionSearchResult>(), false);
+        }
+    }
+    void UMultiplayerSessionsSubsystem::JoinSession(const FOnlineSessionSearchResult& SessionResult)
+    {
+        if (!SessionInterface.IsValid())
+        {
+            MultiplayerOnJoinSessionComplete.Broadcast(EOnJoinSessionCompleteResult::UnknownError);
+            return;
+        }
+
+        JoinSessionCompleteDelegateHandle = SessionInterface->AddOnJoinSessionCompleteDelegate_Handle(JoinSessionCompleteDelegate);
+        const ULocalPlayer* LocalPlayer = GetWorld()->GetFirstLocalPlayerFromController();
+        if(!SessionInterface->JoinSession(*LocalPlayer->GetPreferredUniqueNetId(), NAME_GameSession, SessionResult))
+        {
+            SessionInterface->ClearOnJoinSessionCompleteDelegate_Handle(JoinSessionCompleteDelegateHandle);
+
+            MultiplayerOnJoinSessionComplete.Broadcast(EOnJoinSessionCompleteResult::UnknownError);
+        }
+    }
+
+    void UMultiplayerSessionsSubsystem::OnFindSessionsComplete(bool bWasSuccessful)
+    {
+        if (SessionInterface)
+        {
+            SessionInterface->ClearOnFindSessionsCompleteDelegate_Handle(FindSessionsCompleteDelegateHandle);
+        }
+        if (LastSessionSearch->SearchResults.Num() <= 0)
+        {
+            MultiplayerOnFindSessionsComplete.Broadcast(TArray<FOnlineSessionSearchResult>(), false);
+            return;
+        }
+        MultiplayerOnFindSessionsComplete.Broadcast(LastSessionSearch->SearchResults, bWasSuccessful);
+    }
+    void UMultiplayerSessionsSubsystem::OnJoinSessionComplete(FName SessionName, EOnJoinSessionCompleteResult::Type Result)
+    {
+        if (SessionInterface)
+        {
+            SessionInterface->ClearOnJoinSessionCompleteDelegate_Handle(JoinSessionCompleteDelegateHandle);
+        }
+        MultiplayerOnJoinSessionComplete.Broadcast(Result);
+    }
+    ```
+    - 구현방법은 MenuSystemCharacter를 참고해보자
+
+## Tracking Incoming Players
+- GameModeBase를 상속받아 LobbyGameMode 클래스 생성(C++Classes에)
+- LobbyGameMode.h
+    ``` C++
+    public:
+        virtual void PostLogin(APlayerController* NewPlayer) override;
+        virtual void Logout(AController* Exiting) override;
+    ```
+- LobbyGameMode.cpp
+    ``` C++
+    #include "GameFramework/GameStateBase.h"    
+    #include "GameFramework/PlayerState.h"
+    void ALobbyGameMode::PostLogin(APlayerController* NewPlayer)
+    {
+        Super::PostLogin(NewPlayer);
+        if(GameState)
+        {
+            int32 NumberOfPlayers = GameState.Get()->PlayerArray.Num();
+            if(GEngine)
+            {
+                GEngine->AddOnScreenDebugMessage(
+                    1,
+                    60.f,
+                    FColor::Yellow,
+                    FString::Printf(TEXT("Players in game : %d"),NumberOfPlayers)
+                );
+                APlayerState* PlayerState = NewPlayer->GetPlayerState<APlayerState>();
+                if(PlayerState)
+                {
+                    FString PlayerName = PlayerState->GetPlayerName();
+                    GEngine->AddOnScreenDebugMessage(
+                        1,
+                        60.f,
+                        FColor::Cyan,
+                        FString::Printf(TEXT("%s has joined in game!"),*PlayerName)
+                    );
+                }
+            }
+        }
+    }
+    void ALobbyGameMode::Logout(AController* Exiting)
+    {
+        Super::Logout(Exiting);
+
+        APlayerState* PlayerState = Exiting->GetPlayerState<APlayerState>();
+        if(PlayerState)
+        {
+            int32 NumberOfPlayers = GameState.Get()->PlayerArray.Num();
+            GEngine->AddOnScreenDebugMessage(
+                1,
+                60.f,
+                FColor::Yellow,
+                FString::Printf(TEXT("Players in game : %d"),NumberOfPlayers-1)
+            );
+
+            FString PlayerName = PlayerState->GetPlayerName();
+            GEngine->AddOnScreenDebugMessage(
+                1,
+                60.f,
+                FColor::Cyan,
+                FString::Printf(TEXT("%s has exited in game!"),*PlayerName)
+            );
+        }
+    }
+    ```
+- MultiplayerSessionsSubsystem.cpp
+    ``` C++
+    void UMultiplayerSessionsSubsystem::CreateSession(int32 NumPublicConnections, FString MatchType)
+    {
+        ...
+        LastSessionSettings->BuildUniqueId = 1;
+        ...
+    }
+    ```
+- DefaultGame.ini
+    ```
+    ...
+    [/Script/Enigne.GameSession]
+    MaxPlayers=100
+    ```
+- Player에서 구현했던 것들 지우기
+- LobbyGameMode 상속받은 BP_LobbyGameMode 생성
+    - DefaultPawnClass를 ThirdPersonCharacter로 지정
+    - Lobby에서 GameModeOverride를 BP_LobbyGameMode로 설정
+
+- Challenge) StartSession도 만들어보자
+
+## Lobby만들기
+- Menu.h
+    ``` C++
+    public:
+    	void MenuSetup(int32 NumberOfPublicConnections = 4, FString TypeOfMatch = FString(TEXT("FreeForAll")), FString LobbyPath = FString(TEXT("/Game/ThirdPerson/Maps/Lobby?listen")));
+    private:
+	    FString PathToLobby{TEXT("")};
+    ```
+- Menu.cpp
+    ``` C++
+    void UMenu::MenuSetup(int32 NumberOfPublicConnections, FString TypeOfMatch, FString LobbyPath)
+    {
+        PathToLobby = FString::Printf(TEXT("%s?listen"), *LobbyPath);
+        ...
+    }
+    void UMenu::OnCreateSession(bool bWasSuccessful)
+    {
+        if (bWasSuccessful)
+        {
+            UWorld* World = GetWorld();
+            if (World)
+            {
+                World->ServerTravel(PathToLobby);
+            }
+        }
+        else {
+            ...
+        }
+    }
+    ```
+
+- MultiplayerSessionsSubsystem.h
+    ``` C++
+    private:
+        bool bCreateSessionOnDestroy{ false };
+        int32 LastNumPublicConnections;
+        FString LastMatchType;
+    ```
+- MultiplayerSessionsSubsystem.cpp
+    ``` C++
+    void UMultiplayerSessionsSubsystem::CreateSession(int32 NumPublicConnections, FString MatchType)
+    {
+        if (!SessionInterface.IsValid())
+        {
+            return;
+        }
+        auto ExistingSession = SessionInterface->GetNamedSession(NAME_GameSession);
+        if (ExistingSession != nullptr)
+        {
+            bCreateSessionOnDestroy = true;
+            LastNumPublicConnections = NumPublicConnections;
+            LastMatchType = MatchType;
+            SessionInterface->DestroySession(NAME_GameSession);
+        }
+    }
+    
+    void UMultiplayerSessionsSubsystem::DestroySession()
+    {
+        if (!SessionInterface.IsValid())
+        {
+            MultiplayerOnDestroySessionComplete.Broadcast(false);
+            return;
+        }
+        DestroySessionCompleteDelegateHandle = SessionInterface->AddOnDestroySessionCompleteDelegate_Handle(DestroySessionCompleteDelegate);
+        if (SessionInterface->DestroySession(NAME_GameSession))
+        {
+            SessionInterface->ClearOnDestroySessionCompleteDelegate_Handle(DestroySessionCompleteDelegateHandle);
+            MultiplayerOnDestroySessionComplete.Broadcast(true);
+        }
+    }
+
+    void UMultiplayerSessionsSubsystem::OnDestroySessionComplete(FName SessionName, bool bWasSuccessful)
+    {
+        if (SessionInterface)
+        {
+            SessionInterface->ClearOnDestroySessionCompleteDelegate_Handle(DestroySessionCompleteDelegateHandle);
+        }
+        if (bWasSuccessful && bCreateSessionOnDestroy)
+        {
+            bCreateSessionOnDestroy = false;
+            CreateSession(LastNumPublicConnections, LastMatchType);
+        }
+        MultiplayerOnDestroySessionComplete.Broadcast(bWasSuccessful);
+    }
+    ```
+
+- Quit버튼도 만들어주자
+
+- 한 번 Host, Join 시도하면 다시 못 누르게하기
+    - Menu.cpp
+        ``` C++
+        void UMenu::HostButtonClicked()
+        {
+            HostButton->SetIsEnabled(false);
+            if (MultiplayerSessionsSubsystem)
+            {
+                MultiplayerSessionsSubsystem->CreateSession(NumPublicConnections, MatchType);
+            }
+        }
+
+        void UMenu::JoinButtonClicked()
+        {
+            JoinButton->SetIsEnabled(false);
+            if (MultiplayerSessionsSubsystem)
+            {
+                MultiplayerSessionsSubsystem->FindSessions(10000);
+            }
+        }
+
+        void UMenu::OnCreateSession(bool bWasSuccessful)
+        {
+            if (bWasSuccessful)
+            {
+                ...
+            }
+            else {
+                ...
+                HostButton->SetIsEnabled(true);
+            }
+        }
+
+        void UMenu::OnFindSessions(const TArray<FOnlineSessionSearchResult>& SessionResults, bool bWasSuccessful)
+        {
+            ...
+            if (!bWasSuccessful || SessionResults.Num() == 0)
+            {
+                JoinButton->SetIsEnabled(true);
+            }
+        }
+
+        void UMenu::OnJoinSession(EOnJoinSessionCompleteResult::Type Result)
+        {
+            ...
+            if (Result != EOnJoinSessionCompleteResult::Success)
+            {
+                JoinButton->SetIsEnabled(true);
+            }
+        }
+        ```
