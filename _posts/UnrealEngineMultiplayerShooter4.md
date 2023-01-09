@@ -885,7 +885,7 @@
         {
             Controller->SetHUDCarriedAmmo(CarriedAmmo);
         }
-        EquippedWeapon->AddAmmo(-CarriedAmmo);
+        EquippedWeapon->AddAmmo(-ReloadAmount);
     }
     ```
 - Weapon.h

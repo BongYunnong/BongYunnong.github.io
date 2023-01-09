@@ -1013,3 +1013,396 @@
         }
     }
     ```
+
+## Sniper Rifle
+- WeaponTypes.h
+    ``` C++
+    UENUM(BlueprintType)
+    enum class EWeaponType : uint8
+    {
+        EWT_AssaultRifle UMETA(DisplayName = "AssaultRifle"),
+        EWT_RocketLauncher UMETA(DisplayName = "RocketLauncher"),
+        EWT_Pistol UMETA(DisplayName = "Pistol"),
+        EWT_SubmachineGun UMETA(DisplayName = "SubmachineGun"),
+        EWT_Shotgun UMETA(DisplayName = "Shotgun"),
+        EWT_SniperRifle UMETA(DisplayName = "SniperRifle"),
+        EWT_MAX UMETA(DisplayName = "DefaultMax")
+    };
+    ```
+- CombatComponent.h
+    ``` C++
+    private:    
+        UPROPERTY(EditDefaultsOnly)
+		int32 StartingSniperAmmo = 1;
+    ```
+- CombatComponent.cpp
+    ``` C++
+    void UCombatComponent::InitializeCarriedAmmo()
+    {
+        CarriedAmmoMap.Emplace(EWeaponType::EWT_AssaultRifle, StartingARAmmo);
+        CarriedAmmoMap.Emplace(EWeaponType::EWT_RocketLauncher, StartingRocketAmmo);
+        CarriedAmmoMap.Emplace(EWeaponType::EWT_Pistol, StartingPistolAmmo);
+        CarriedAmmoMap.Emplace(EWeaponType::EWT_SubmachineGun, StartingSMGAmmo);
+        CarriedAmmoMap.Emplace(EWeaponType::EWT_Shotgun, StartingShotgunAmmo);
+        CarriedAmmoMap.Emplace(EWeaponType::EWT_SniperRifle, StartingSniperAmmo);
+    }
+    ```
+- BlasterCharacter.cpp
+    ``` C++
+    void ABlasterCharacter::PlayReloadMontage()
+    {
+        ...
+        if (AnimInstance && ReloadMontage)
+        {
+            ...
+            case EWeaponType::EWT_SniperRifle:
+                SectionName = FName("Rifle");
+                break;
+            }
+            ...
+        }
+    }
+    ```
+- Blueprints > Weapon에 HitScanWeapon을 상속받는 BP_SniperRifle 생성
+
+- Blueprints > HUD 폴더에 UserWidget을 상속받는 WBP_SniperScope 생성
+    - Image로 ScopeOverlay, Background 생성
+    - ScopeZoomIn 애니메이션 생성
+
+- BlasterCharacter.h
+    ``` C++
+    public:
+        UFUNCTION(BlueprintImplementableEvent)
+        void ShowSniperScopeWidget(bool bShowScope);
+    ```
+- CombatComponent.cpp
+    ``` C++
+    void UCombatComponent::SetAiming(bool bIsAiming)
+    {
+        if (Character == nullptr || EquippedWeapon == nullptr) return;
+        ...
+        if (Character->IsLocallyControlled() && EquippedWeapon->GetWeaponType() == EWeaponType::EWT_SniperRifle)
+        {
+            Character->ShowSniperScopeWidget(bIsAiming);
+        }
+    }
+    ```
+- BP_BlasterCharacter에서 ShowSniperScopeWidget을 Implement해서
+    - SniperScopeWidget이 Valid하지 않다면 WBPSniperScope를 생성하고 SniperScopeWidget 변수에 저장
+    - Valid체크하고 Scope Zoom In 애니메이션을 Play / ReversePlay
+    - PlaySound2D
+- 줌 한 채로 죽었을 때 처리하기
+    - BlasterCharacter.cpp
+        ``` C++
+        void ABlasterCharacter::MulticastElim_Implementation()
+        {
+            ...
+            bool bHideSniperScope = IsLocallyControlled() && Combat && Combat->bAiming && Combat->EquippedWeapon && Combat->EquippedWeapon->GetWeaponType() == EWeaponType::EWT_SniperRifle;
+            if (bHideSniperScope)
+            {
+                ShowSniperScopeWidget(false);
+            }
+        }
+        ```
+
+## Grenade Launcher
+- WeaponTypes.h
+    ``` C++
+    UENUM(BlueprintType)
+    enum class EWeaponType : uint8
+    {
+        ...
+        EWT_GrenadeLauncher UMETA(DisplayName = "GrenadeLauncher"),
+        EWT_MAX UMETA(DisplayName = "DefaultMax")
+    };
+    ```
+- CombatComponent.h
+    ``` C++
+    private:
+        UPROPERTY(EditDefaultsOnly)
+		int32 StartingGrenadeLauncherAmmo = 1;
+    ```
+- CombatComponent.cpp
+    ``` C++
+    void UCombatComponent::InitializeCarriedAmmo()
+    {
+        ...
+        CarriedAmmoMap.Emplace(EWeaponType::EWT_GrenadeLauncher, StartingGrenadeLauncherAmmo);
+    }
+    ```
+- BlasterCharacter.cpp
+    ``` C++
+    void ABlasterCharacter::PlayReloadMontage()
+    {
+        ...
+    case EWeaponType::EWT_GrenadeLauncher:
+        SectionName = FName("Rifle");
+        break;
+       ...
+    }
+    ```
+- Blueprints > Weapon 폴더에 ProjectileWeapon을 상속받는 BP_GrenadeLauncher생성
+
+
+## Projectile Grenade
+- 쓸 수 있는거 빼오기
+- ProjectileRocket.h
+    ``` C++
+    protected:
+        //UPROPERTY(EditAnywhere)
+        //class UNiagaraSystem* TrailSystem;
+        //UPROPERTY()
+        //class UNiagaraComponent* TrailSystemComponent;
+
+	    //void DestroyTimerFinished();
+    private:
+        //FTimerHandle DestroyTimer;
+        //UPROPERTY(EditAnywhere)
+        //float DestroyTime = 3.f;
+        
+	    //UPROPERTY(VisibleAnywhere)
+		//UStaticMeshComponent* RocketMesh;
+    ```
+- Projectile.h
+    ``` C++
+    protected:
+	    void StartDestroyTimer();
+	    void DestroyTimerFinished();
+        ...
+    	UPROPERTY(EditAnywhere)
+		class UNiagaraSystem* TrailSystem;
+	    UPROPERTY()
+		class UNiagaraComponent* TrailSystemComponent;
+	    void SpawnTrailSystem();
+        
+        UPROPERTY(VisibleAnywhere)
+        UStaticMeshComponent* ProjectileMesh;
+    private:
+        FTimerHandle DestroyTimer;
+        UPROPERTY(EditAnywhere)
+		float DestroyTime = 3.f;
+    ```
+- Projectile.cpp
+    ``` C++
+    #include "NiagaraFunctionLibrary.h"
+    #include "NiagaraComponent.h"
+    void AProjectile::SpawnTrailSystem()
+    {
+        if (TrailSystem)
+        {
+            TrailSystemComponent = UNiagaraFunctionLibrary::SpawnSystemAttached(
+                TrailSystem,
+                GetRootComponent(),
+                FName(),
+                GetActorLocation(),
+                GetActorRotation(),
+                EAttachLocation::KeepWorldPosition,
+                false
+            );
+        }
+    }
+    void AProjectile::StartDestroyTimer()
+    {
+        GetWorldTimerManager().SetTimer(
+            DestroyTimer,
+            this,
+            &AProjectile::DestroyTimerFinished,
+            DestroyTime
+        );
+    }
+
+    void AProjectile::DestroyTimerFinished()
+    {
+        Destroy();
+    }
+    ```
+- ProjectileRocket.cpp
+    ``` C++
+    AProjectileRocket::AProjectileRocket()
+    {
+        ProjectileMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Rocket Mesh"));
+        ProjectileMesh->SetupAttachment(RootComponent);
+        ProjectileMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+        ...
+    }
+    /*    
+    void AProjectileRocket::DestroyTimerFinished()
+    {
+        Destroy();
+    }
+    */
+    void AProjectileRocket::BeginPlay()
+    {
+        ...
+        SpawnTrailSystem();
+        ...
+    }
+    void AProjectileRocket::OnHit(UPrimitiveComponent* HitComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, FVector NormalImpulse, const FHitResult& Hit)
+    {
+        ...
+        StartDestroyTimer();
+        ...
+        if (ProjectileMesh)
+        {
+            ProjectileMesh->SetVisibility(false);
+        }
+        ...
+    }
+    ```
+
+- Source > Blaster > Weapon 폴더에 Projectile을 상속받은 ProjectileGrenade생성
+
+- ProjectileGrenade.h
+    ``` C++
+    public:
+        AProjectileGrenade();
+    protected:
+        virtual void BeginPlay() override;
+        UFUNCTION()
+        void OnBounce(const FHitResult& ImpactResult, const FVector& ImpactVelocity);
+    private:
+        UPROPERTY(EditAnywhere)
+            USoundCue* BounceSound;
+    ```
+- ProjectileGrenade.cpp
+    ``` C++
+    #include "ProjectileGrenade.h"
+    #include "GameFramework/ProjectileMovementComponent.h"
+    #include "Kismet/GameplayStatics.h"
+    #include "Sound/SoundCue.h"
+    AProjectileGrenade::AProjectileGrenade()
+    {
+        ProjectileMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Grenade Mesh"));
+        ProjectileMesh->SetupAttachment(RootComponent);
+        ProjectileMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
+        ProjectileMovementComponent = CreateDefaultSubobject<UProjectileMovementComponent>(TEXT("ProjectileMovementComponent"));
+        ProjectileMovementComponent->bRotationFollowsVelocity = true;
+        ProjectileMovementComponent->SetIsReplicated(true);
+        ProjectileMovementComponent->bShouldBounce = true;
+    }
+    void AProjectileGrenade::BeginPlay()
+    {
+        AActor::BeginPlay();
+
+        SpawnTrailSystem();
+        StartDestroyTimer();
+
+        ProjectileMovementComponent->OnProjectileBounce.AddDynamic(this, &AProjectileGrenade::OnBounce);
+    }
+    void AProjectileGrenade::OnBounce(const FHitResult& ImpactResult, const FVector& ImpactVelocity)
+    {
+        if (BounceSound)
+        {
+            UGameplayStatics::PlaySoundAtLocation(
+                this,
+                BounceSound,
+                GetActorLocation()
+            );
+        }
+    }
+    ```
+
+- Blueprints > Weapon > Projectiles에 BP_ProjectileGrenade생성
+- NS_TrailSmoke 변형한 NS_TrailSmoke_Grenade생성
+
+- BP_GrenadeLauncher에 적용
+
+- 데미지 적용하기
+
+- ProjectileGrenade.h
+    ``` C++
+    public:
+    	virtual void Destroyed() override;
+    ```
+- ProjectileGrenade.cpp
+    ``` C++
+    void AProjectileRocket::OnHit(UPrimitiveComponent* HitComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, FVector NormalImpulse, const FHitResult& Hit)
+    {
+        ...
+        ExplodeDamage();
+        StartDestroyTimer();
+        ...
+    }
+    ```
+- Projectile.h
+    ``` C++
+    protected:
+    	void ExplodeDamage();
+	    UPROPERTY(EditAnywhere)
+        float DamageInnerRadius = 200.f;
+	    UPROPERTY(EditAnywhere)
+        float DamageOuterRadius = 500.f;
+    ```
+- Projectile.cpp
+    ``` C++
+    void AProjectileGrenade::Destroyed()
+    {
+        ExplodeDamage();
+        Super::Destroyed();
+    }
+    void AProjectile::ExplodeDamage()
+    {
+        APawn* FiringPawn = GetInstigator();
+        if (FiringPawn && HasAuthority())
+        {
+            AController* FiringController = FiringPawn->GetController();
+            if (FiringController)
+            {
+                UGameplayStatics::ApplyRadialDamageWithFalloff(
+                    this,
+                    Damage,
+                    10.f,
+                    GetActorLocation(),
+                    DamageInnerRadius,
+                    DamageOuterRadius,
+                    1.f,
+                    UDamageType::StaticClass(),
+                    TArray<AActor*>(),
+                    this,
+                    FiringController
+                );
+            }
+        }
+    }
+    ```
+- Reload 몽타주에 reload 애니메이션 다 설정하기
+- BlasterCharacter.cpp
+    ``` C++
+    void ABlasterCharacter::PlayReloadMontage()
+    {
+        if (Combat == nullptr || Combat->EquippedWeapon == nullptr) return;
+
+        UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance();
+        if (AnimInstance && ReloadMontage)
+        {
+            AnimInstance->Montage_Play(ReloadMontage);
+            FName SectionName;
+            switch (Combat->EquippedWeapon->GetWeaponType())
+            {
+            case EWeaponType::EWT_AssaultRifle:
+                SectionName = FName("Rifle");
+                break;
+            case EWeaponType::EWT_RocketLauncher:
+                SectionName = FName("RocketLauncher");
+                break;
+            case EWeaponType::EWT_Pistol:
+                SectionName = FName("Pistol");
+                break;
+            case EWeaponType::EWT_SubmachineGun:
+                SectionName = FName("Pistol");
+                break;
+            case EWeaponType::EWT_Shotgun:
+                SectionName = FName("Shotgun");
+                break;
+            case EWeaponType::EWT_SniperRifle:
+                SectionName = FName("SniperRifle");
+                break;
+            case EWeaponType::EWT_GrenadeLauncher:
+                SectionName = FName("GrenadeLaunchers");
+                break;
+            }
+            AnimInstance->Montage_JumpToSection(SectionName);
+        }
+    }
+    ```
