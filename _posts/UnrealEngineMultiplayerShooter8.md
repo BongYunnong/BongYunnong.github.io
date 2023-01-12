@@ -1406,3 +1406,564 @@
         }
     }
     ```
+
+## Shotgun Reload
+- Reload의 Shotgun쪽에 장전을 할 때마다 Shell Notify삽입, ShotgunEnd 섹션 추가
+- CombatComponent.h
+    ``` C++
+    public:
+        UFUNCTION(BlueprintCallable)
+        void ShotgunShellReload();
+	    void JumpToShotgunEnd();
+    private:
+    	void UpdateShotgunAmmoValues();
+    ```
+- CombatComponent.cpp
+    ``` C++
+    #include "Blaster/Character/BlasterAnimInstance.h"
+    void UCombatComponent::ShotgunShellReload()
+    {
+        if (Character && Character->HasAuthority())
+        {
+            UpdateShotgunAmmoValues();
+        }
+    }
+
+    void UCombatComponent::UpdateShotgunAmmoValues()
+    {
+        if (Character == nullptr && EquippedWeapon != nullptr) return;
+        if (CarriedAmmoMap.Contains(EquippedWeapon->GetWeaponType()))
+        {
+            CarriedAmmoMap[EquippedWeapon->GetWeaponType()] -= 1;
+            CarriedAmmo = CarriedAmmoMap[EquippedWeapon->GetWeaponType()];
+        }
+        Controller = Controller == nullptr ? Cast<ABlasterPlayerController>(Character->Controller) : Controller;
+        if (Controller)
+        {
+            Controller->SetHUDCarriedAmmo(CarriedAmmo);
+        }
+        EquippedWeapon->AddAmmo(-1);
+	    bCanFire = true;
+        if (EquippedWeapon->IsFull()|| CarriedAmmo==0)
+        {
+            JumpToShotgunEnd();
+        }
+    }
+    void UCombatComponent::JumpToShotgunEnd()
+    {
+        UAnimInstance* AnimInstance = Character->GetMesh()->GetAnimInstance();
+        if (AnimInstance && Character->GetReloadMontage())
+        {
+            AnimInstance->Montage_JumpToSection(FName("ShotgunEnd"));
+        }
+    }
+    void UCombatComponent::OnRep_CarriedAmmo()
+    {
+        Controller = Controller == nullptr ? Cast<ABlasterPlayerController>(Character->Controller) : Controller;
+        if (Controller)
+        {
+            Controller->SetHUDCarriedAmmo(CarriedAmmo);
+        }
+        bool bJumpToShotgunEnd =
+            CombatState == ECombatState::ECS_Reloading
+            && EquippedWeapon != nullptr
+            && EquippedWeapon->GetWeaponType() == EWeaponType::EWT_Shotgun
+            && CarriedAmmo == 0;
+        if (bJumpToShotgunEnd)
+        {
+            JumpToShotgunEnd();
+        }
+    }
+    bool UCombatComponent::CanFire()
+    {
+        if (EquippedWeapon == nullptr) return false;
+        if (EquippedWeapon->IsEmpty() && bCanFire && CombatState == ECombatState::ECS_Reloading && EquippedWeapon->GetWeaponType() == EWeaponType::EWT_Shotgun) return true;
+        return !EquippedWeapon->IsEmpty() && bCanFire && CombatState == ECombatState::ECS_Unoccupied;
+    }
+    void UCombatComponent::MulticastFire_Implementation(const FVector_NetQuantize& TraceHitResult)
+    {
+        if (EquippedWeapon == nullptr) return;
+        if (Character && CombatState == ECombatState::ECS_Reloading && EquippedWeapon->GetWeaponType() == EWeaponType::EWT_Shotgun)
+        {
+            Character->PlayFireMontage(bAiming);
+            EquippedWeapon->Fire(TraceHitResult);
+            CombatState = ECombatState::ECS_Unoccupied;
+            return;
+        }
+        if (Character && CombatState == ECombatState::ECS_Unoccupied)
+        {
+            Character->PlayFireMontage(bAiming);
+            EquippedWeapon->Fire(TraceHitResult);
+        }
+    }
+    ```
+- Weapon.h
+    ``` C++
+    public:
+    	bool IsFull();
+    ```
+- Weapon.cpp
+    ``` C++
+    #include "Blaster/BlasterComponents/CombatComponent.h"
+    bool AWeapon::IsFull()
+    {
+        return Ammo == MagCapacity;
+    }
+    ```
+- BlasterCharacter.h
+    ``` C++
+    public:
+    	FORCEINLINE UAnimMontage* GetReloadMontage() const { return ReloadMontage; };
+    ```
+- BlasterAnimBP에서 Shell AnimNotify가 트리거되면 Character->Combat의 ShotgunShellReload호출
+
+## outline 효과
+- postprocess volume에 post process material을 추가할 수 있음
+    - (이미 강의에서 만들어준)pp_hightlight를 추가
+    - 이제 어떤 액터를 선택해서 custom depth를 설정 가능
+        - Render Custom Depth Pass = true
+        - CustomDepth Stencil Value는 250으로 설정
+- Weapon.h
+    ``` C++
+    public:
+        // Enable or disable custom depth
+        void EnableCustomDepth(bool bEnable);
+    ```
+- Weapon.cpp
+    ``` C++
+    AWeapon::AWeapon()
+    {
+        ...
+        WeaponMesh->SetCustomDepthStencilValue(CUSTOM_DEPTH_BLUE);
+        WeaponMesh->MarkRenderStateDirty();
+        EnableCustomDepth(true);
+        ...
+    }
+    void AWeapon::EnableCustomDepth(bool bEnable)
+    {
+        if (WeaponMesh)
+        {
+            WeaponMesh->SetRenderCustomDepth(bEnable);
+        }
+    }
+    void AWeapon::OnRep_WeaponState()
+    {
+        switch (WeaponState)
+        {
+        case EWeaponState::EWS_Equipped:
+            ...
+		    EnableCustomDepth(false);
+            break;
+        case EWeaponState::EWS_Dropped:
+            ...
+            WeaponMesh->SetCustomDepthStencilValue(CUSTOM_DEPTH_BLUE);
+            WeaponMesh->MarkRenderStateDirty();
+            EnableCustomDepth(true);
+            break;
+        }
+    }
+
+    void AWeapon::SetWeaponState(EWeaponState State)
+    {
+        WeaponState = State;
+
+        switch (WeaponState)
+        {
+        case EWeaponState::EWS_Equipped:
+            ...
+            EnableCustomDepth(false);
+            break;
+        case EWeaponState::EWS_Dropped:
+            ...
+            WeaponMesh->SetCustomDepthStencilValue(CUSTOM_DEPTH_BLUE);
+            WeaponMesh->MarkRenderStateDirty();
+            EnableCustomDepth(true);
+            break;
+        }
+    }
+    ```
+- WeaponTypes.h
+    ``` C++
+    #define CUSTOM_DEPTH_PURPLE 250
+    #define CUSTOM_DEPTH_BLUE 251
+    #define CUSTOM_DEPTH_TAN 252
+    ```
+- 모든 무기 BP에 가서 RenderPass, Depth 설정하기
+- ProjectSettings에서 CustomDepth-StencilPass를 Enabled with Stencil로 설정
+
+## Grenade Throw Animation
+- Grenade Toss 애니메이션을 토대로 ThrowGrenade를 제작
+    - slot은 WeaponSlot
+    - 끝쪽에 FinishGrenadeThrow 노티파이추가
+- BP_BlasterCharacter에서 ThrowGrenadeMontage 설정
+    - EventGraph에서 Character와 Combat IsValid체크하고 ThrowGrenadeFinished호출
+- BlasterCharacter.h
+    ``` C++
+    public:
+    	void PlayThrowGrenadeMontage();
+    private:
+    	UPROPERTY(EditAnywhere, Category = Combat)
+		UAnimMontage* ThrowGrendaeMontage;
+    protected:
+    	void GrenadeButtonPressed();
+    ```
+- BlasterCharacter.cpp
+    ``` C++
+    void ABlasterCharacter::PlayThrowGrenadeMontage()
+    {
+        UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance();
+        if (AnimInstance && ThrowGrendaeMontage)
+        {
+            AnimInstance->Montage_Play(ThrowGrendaeMontage);
+        }
+    }
+    void ABlasterCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
+    {
+        ...
+        PlayerInputComponent->BindAction("ThrowGrenade", IE_Pressed, this, &ABlasterCharacter::GrenadeButtonPressed);
+    }
+    void ABlasterCharacter::GrenadeButtonPressed()
+    {
+        if (Combat)
+        {
+            Combat->ThrowGrenade();
+        }
+    }
+    ```
+- ProjectSetting의 Input에서 ThrowGrenade를 T키로 액션 매핑
+
+- CombatComponent.h
+    ``` C++
+    public:
+        UFUNCTION(BlueprintCallable)
+        void ThrowGrenadeFinished();
+    protected:
+	    void ThrowGrenade();
+        UFUNCTION(Server,Reliable)
+        void ServerThrowGrenade();
+    ```
+- CombatComponent.cpp
+    ``` C++
+    void UCombatComponent::ThrowGrenadeFinished()
+    {
+        CombatState = ECombatState::ECS_Unoccupied;
+    }
+    void UCombatComponent::ThrowGrenade()
+    {
+	    if (CombatState != ECombatState::ECS_Unoccupied) return;
+        CombatState = ECombatState::ECS_ThrowingGrenade;
+        if (Character)
+        {
+            Character->PlayThrowGrenadeMontage();
+        }
+        if (Character && !Character->HasAuthority())
+        {
+            ServerThrowGrenade();
+        }
+    }
+    void UCombatComponent::ServerThrowGrenade_Implementation()
+    {
+        CombatState = ECombatState::ECS_ThrowingGrenade;
+        if (Character)
+        {
+            Character->PlayThrowGrenadeMontage();
+        }
+    }
+    void UCombatComponent::OnRep_CombatState()
+    {
+        switch (CombatState)
+        {
+        ...
+        case ECombatState::ECS_ThrowingGrenade:
+            if (Character && !Character->IsLocallyControlled())
+            {
+                Character->PlayThrowGrenadeMontage();
+            }
+            break;
+        }
+    }
+
+    ```
+- CombatState.h
+    ``` C++
+    UENUM(BlueprintType)
+    enum class ECombatState : uint8
+    {
+        ECS_Unoccupied UMETA(DisplayName = "Unoccupied"),
+        ECS_Reloading UMETA(DisplayName = "Reloading"),
+        ECS_ThrowingGrenade UMETA(DisplayName = "ThrowingGrenade"),
+        ECS_MAX UMETA(DisplayName = "DefaultMAX")
+    };
+    ```
+
+- 수류탄 던질때는 FABRIK안 쓸 것임
+    - BlasterAnimInstance.cpp
+        ``` C++
+        void UBlasterAnimInstance::NativeUpdateAnimation(float DeltaTime)
+        {
+            ...
+            bUseFABRIK = BlasterCharacter->GetCombatState() == ECombatState::ECS_Unoccupied;
+            bUseAimOffsets = BlasterCharacter->GetCombatState() == ECombatState::ECS_Unoccupied && !BlasterCharacter->GetDisableGameplay();
+            bTransformRightHand = BlasterCharacter->GetCombatState() == ECombatState::ECS_Unoccupied && !BlasterCharacter->GetDisableGameplay();
+        }
+        ```
+    - CombatComponent.cpp
+        ``` C++
+        void UCombatComponent::EquipWeapon(AWeapon* WeaponToEquip)
+        {
+            if (Character == nullptr || WeaponToEquip == nullptr) return;
+            if (CombatState != ECombatState::ECS_Unoccupied) return;
+            ...
+        }
+        void UCombatComponent::Reload()
+        {
+            if (CarriedAmmo > 0 && CombatState == ECombatState::ECS_Unoccupied)
+            {
+                ServerReload();
+            }
+        }
+        ```
+
+## Weapon Attachment while Throwing Grenades
+- CombatComponent.h
+    ``` C++
+    protected:
+    	void DropEquippedWeapon();
+	    void AttachActorToRightHand(AActor* ActorToAttach);
+        void AttachActorToLeftHand(AActor* ActorToAttach);
+        void UpdateCarriedAmmo();
+        void PlayEquipWeaponSound();
+        void ReloadEmptyWeapon();
+    ```
+- CombatComponent.cpp
+    ``` C++
+    void UCombatComponent::EquipWeapon(AWeapon* WeaponToEquip)
+    {
+        if (Character == nullptr || WeaponToEquip == nullptr) return;
+        if (CombatState != ECombatState::ECS_Unoccupied) return;
+        DropEquippedWeapon();
+        EquippedWeapon = WeaponToEquip;
+        EquippedWeapon->SetWeaponState(EWeaponState::EWS_Equipped);
+        AttachActorToRightHand(EquippedWeapon);
+        EquippedWeapon->SetOwner(Character);
+        EquippedWeapon->SetHUDAmmo();
+        UpdateCarriedAmmo();
+        PlayEquipWeaponSound();
+        ReloadEmptyWeapon();
+        Character->GetCharacterMovement()->bOrientRotationToMovement = false;
+        Character->bUseControllerRotationYaw = true;
+    }
+    void UCombatComponent::DropEquippedWeapon()
+    {
+        if (EquippedWeapon)
+        {
+            EquippedWeapon->Dropped();
+        }
+    }
+    void UCombatComponent::AttachActorToRightHand(AActor* ActorToAttach)
+    {
+        if (Character == nullptr || Character->GetMesh() == nullptr || ActorToAttach == nullptr || EquippedWeapon == nullptr) return;
+        const USkeletalMeshSocket* HandSocket = Character->GetMesh()->GetSocketByName(FName("RightHandSocket"));
+        if (HandSocket)
+        {
+            HandSocket->AttachActor(ActorToAttach, Character->GetMesh());
+        }
+    }
+    void UCombatComponent::AttachActorToLeftHand(AActor* ActorToAttach)
+    {
+        if (Character == nullptr || Character->GetMesh() == nullptr || ActorToAttach == nullptr || EquippedWeapon == nullptr) return;
+        bool bUsePistolSocket = EquippedWeapon->GetWeaponType() == EWeaponType::EWT_Pistol || EquippedWeapon->GetWeaponType() == EWeaponType::EWT_SubmachineGun;
+        FName SocketName = bUsePistolSocket ? FName("PistolSocket") : FName("LeftHandSocket");
+        const USkeletalMeshSocket* HandSocket = Character->GetMesh()->GetSocketByName(SocketName);
+        if (HandSocket)
+        {
+            HandSocket->AttachActor(ActorToAttach, Character->GetMesh());
+        }
+    }
+    void UCombatComponent::UpdateCarriedAmmo()
+    {
+        if (EquippedWeapon == nullptr) return;
+        if (CarriedAmmoMap.Contains(EquippedWeapon->GetWeaponType()))
+        {
+            CarriedAmmo = CarriedAmmoMap[EquippedWeapon->GetWeaponType()];
+        }
+        Controller = Controller == nullptr ? Cast<ABlasterPlayerController>(Character->Controller) : Controller;
+        if (Controller)
+        {
+            Controller->SetHUDCarriedAmmo(CarriedAmmo);
+        }
+    }
+
+    void UCombatComponent::PlayEquipWeaponSound()
+    {
+        if (Character && EquippedWeapon && EquippedWeapon->EquipSound)
+        {
+            UGameplayStatics::PlaySoundAtLocation(
+                this,
+                EquippedWeapon->EquipSound,
+                Character->GetActorLocation()
+            );
+        }
+    }
+    void UCombatComponent::ReloadEmptyWeapon()
+    {
+	    if (EquippedWeapon && EquippedWeapon->IsEmpty())
+        {
+            Reload();
+        }
+    }
+    void UCombatComponent::ThrowGrenadeFinished()
+    {
+        CombatState = ECombatState::ECS_Unoccupied;
+        AttachActorToRightHand(EquippedWeapon);
+    }
+    void UCombatComponent::OnRep_CombatState()
+    {
+        switch (CombatState)
+        {
+        ...
+        case ECombatState::ECS_ThrowingGrenade:
+            if (Character && !Character->IsLocallyControlled())
+            {
+                Character->PlayThrowGrenadeMontage();
+                AttachActorToLeftHand(EquippedWeapon);
+            }
+            break;
+        }
+    }
+    void UCombatComponent::ThrowGrenade()
+    {
+        ...
+        if (Character)
+        {
+            Character->PlayThrowGrenadeMontage();
+            AttachActorToLeftHand(EquippedWeapon);
+        }
+        ...
+    }
+    void UCombatComponent::ServerThrowGrenade_Implementation()
+    {
+        CombatState = ECombatState::ECS_ThrowingGrenade;
+        if (Character)
+        {
+            Character->PlayThrowGrenadeMontage();
+            AttachActorToLeftHand(EquippedWeapon);
+        }
+    }
+    void UCombatComponent::OnRep_EquippedWeapon()
+    {
+        if (EquippedWeapon && Character)
+        {
+            EquippedWeapon->SetWeaponState(EWeaponState::EWS_Equipped);
+            AttachActorToRightHand(EquippedWeapon);
+            Character->GetCharacterMovement()->bOrientRotationToMovement = false;
+            Character->bUseControllerRotationYaw = true;
+            PlayEquipWeaponSound();
+        }
+    }
+    void UCombatComponent::FireTimerFinished()
+    {
+        if (EquippedWeapon == nullptr) return;
+        bCanFire = true;
+        if (bFireButtonPressed && EquippedWeapon->bAutomatic)
+        {
+            Fire();
+        }
+        ReloadEmptyWeapon();
+    }
+    ```
+
+## Grenade
+- BlasterCharacter.h
+    ``` C++
+    private:
+        // Grenade
+        UPROPERTY(VisibleAnywhere)
+        UStaticMeshComponent* AttachedGrenade;
+    ```
+- BlasterCharacter.cpp
+    ``` C++
+    ABlasterCharacter::ABlasterCharacter()
+    {
+        ...
+        AttachedGrenade = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("AttachedGrenade"));
+	    AttachedGrenade->SetupAttachment(GetMesh(), FName("GrenadeSocket"));
+	    AttachedGrenade->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+    }
+    void ABlasterCharacter::BeginPlay()
+    {
+        ...
+        if (AttachedGrenade)
+        {
+            AttachedGrenade->SetVisibility(false);
+        }
+    }
+    ```
+- CombatComponent.h
+    ``` C++
+    public:
+    	UFUNCTION(BlueprintCallable)
+		void LaunchGrenade();
+    protected:
+    	void ShowAttachedGrenade(bool bShowGrenade);
+    public:
+	    FORCEINLINE UStaticMeshComponent* GetAttachedGrenade() const { return AttachedGrenade; };
+    ```
+- CombatComponent.cpp
+    ``` C++
+    void UCombatComponent::LaunchGrenade()
+    {
+        ShowAttachedGrenade(false);
+    }
+    void UCombatComponent::Reload()
+    {
+        if (CarriedAmmo > 0 && CombatState == ECombatState::ECS_Unoccupied && EquippedWeapon && !EquippedWeapon->IsFull())
+        {
+            ServerReload();
+        }
+    }
+    void UCombatComponent::ThrowGrenade()
+    {
+        ...
+        if (Character)
+        {
+            Character->PlayThrowGrenadeMontage();
+            AttachActorToLeftHand(EquippedWeapon);
+            ShowAttachedGrenade(true);
+        }
+        ...
+    }
+    void UCombatComponent::ServerThrowGrenade_Implementation()
+    {
+        CombatState = ECombatState::ECS_ThrowingGrenade;
+        if (Character)
+        {
+            Character->PlayThrowGrenadeMontage();
+            AttachActorToLeftHand(EquippedWeapon);
+            ShowAttachedGrenade(true);
+        }
+    }
+    void UCombatComponent::OnRep_CombatState()
+    {
+        switch (CombatState)
+        {
+        ...
+        case ECombatState::ECS_ThrowingGrenade:
+            if (Character && !Character->IsLocallyControlled())
+            {
+                Character->PlayThrowGrenadeMontage();
+                AttachActorToLeftHand(EquippedWeapon);
+                ShowAttachedGrenade(true);
+            }
+            break;
+        }
+    }
+    void UCombatComponent::ShowAttachedGrenade(bool bShowGrenade)
+    {
+        if (Character && Character->GetAttachedGrenade())
+        {
+            Character->GetAttachedGrenade()->SetVisibility(bShowGrenade);
+        }
+    }
+    ```
+- ABP에서 Character와 Combat Valid체크하고 LaunchGrenade 호출
