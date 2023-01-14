@@ -1967,3 +1967,196 @@
     }
     ```
 - ABP에서 Character와 Combat Valid체크하고 LaunchGrenade 호출
+
+
+- BP_ProjectileGrenade를 복제해서 BP_ThrowGrenade생성
+    - 메쉬는 삭제
+    - particle system을 추가해서 이펙트 설정
+    - 파티클에 맞게 box extent 변경
+
+- CombatComponent.h
+    ``` C++
+    protected:
+        UPROPERTY(EditAnywhere)
+        TSubclassOf<class AProjectile> GrenadeClass;
+    ```
+- CombatComponent.cpp
+    ``` C++
+    #include "Blaster/Weapon/Projectile.h"
+
+    void UCombatComponent::LaunchGrenade()
+    {
+        ShowAttachedGrenade(false);
+
+        if (Character && Character->HasAuthority() && GrenadeClass && Character->GetAttachedGrenade())
+        {
+            const FVector StartingLocation = Character->GetAttachedGrenade()->GetComponentLocation();
+            FVector ToTarget = HitTarget - StartingLocation;
+            FActorSpawnParameters SpawnParams;
+            SpawnParams.Owner = Character;
+            SpawnParams.Instigator = Character;
+            UWorld* World = GetWorld();
+            if (World)
+            {
+                World->SpawnActor<AProjectile>(GrenadeClass, StartingLocation, ToTarget.Rotation(), SpawnParams);
+            }
+        }
+    }
+    ```
+- BP_BlasterCharacter에 GrenadeClass를 BP_ThrowGrenade로 변경
+
+- CombatComponent.h
+    ``` C++
+    public:
+        UFUNCTION(Server,Reliable)
+		void ServerLaunchGrenade(const FVector_NetQuantize& Target);
+    ```
+- CombatComponent.cpp
+    ``` C++
+    void UCombatComponent::LaunchGrenade()
+    {
+        ShowAttachedGrenade(false);
+        if (Character && Character->IsLocallyControlled())
+        {
+            ServerLaunchGrenade(HitTarget);
+        }
+    }
+    void UCombatComponent::ServerLaunchGrenade_Implementation(const FVector_NetQuantize& Target)
+    {
+        if (Character && GrenadeClass && Character->GetAttachedGrenade())
+        {
+            const FVector StartingLocation = Character->GetAttachedGrenade()->GetComponentLocation();
+            FVector ToTarget = Target - StartingLocation;
+            FActorSpawnParameters SpawnParams;
+            SpawnParams.Owner = Character;
+            SpawnParams.Instigator = Character;
+            UWorld* World = GetWorld();
+            if (World)
+            {
+                World->SpawnActor<AProjectile>(GrenadeClass, StartingLocation, ToTarget.Rotation(), SpawnParams);
+            }
+        }
+    }
+    void UCombatComponent::ThrowGrenade(const FVector_NetQuantize& Target)
+    {
+        if (CombatState != ECombatState::ECS_Unoccupied || EquippedWeapon==nullptr) return;
+        ...
+    }
+    ```
+
+## Grenade HUD
+- CharacterOverlay.h
+    ``` C++
+    public:  
+    	UPROPERTY(meta = (BindWidget))
+		UTextBlock* GrenadeText
+    ```
+- BlasterPlayerController.h
+    ``` C++
+    public:
+    	void SetHUDGrenades(int32 Grenades);
+    private:
+    	int32 HUDGrenades;
+    ```
+- BlasterPlayerController.cpp
+    ``` C++
+    void ABlasterPlayerController::PollInit()
+    {
+        if (CharacterOverlay == nullptr)
+        {
+            if (BlasterHUD && BlasterHUD->CharacterOverlay)
+            {
+                CharacterOverlay = BlasterHUD->CharacterOverlay;
+                if (CharacterOverlay)
+                {
+                    SetHUDHealth(HUDHealth, HUDMaxHealth);
+                    SetHUDScore(HUDScore);
+                    SetHUDDefeats(HUDDefeats);
+                    ABlasterCharacter* BlasterCharacter = Cast<ABlasterCharacter>(GetPawn());
+                    if (BlasterCharacter && BlasterCharacter->GetCombat())
+                    {
+                        SetHUDGrenades(BlasterCharacter->GetCombat()->GetGrenades());
+                    }
+                }
+            }
+        }
+    }
+    void ABlasterPlayerController::SetHUDGrenades(int32 Grenades)
+    {
+        BlasterHUD = BlasterHUD == nullptr ? Cast<ABlasterHUD>(GetHUD()) : BlasterHUD;
+        bool bHUDValid = BlasterHUD &&
+            BlasterHUD->CharacterOverlay &&
+            BlasterHUD->CharacterOverlay->GrenadeText;
+        if (bHUDValid)
+        {
+            FString GrenadeText = FString::Printf(TEXT("%d"), Grenades);
+            BlasterHUD->CharacterOverlay->GrenadeText->SetText(FText::FromString(GrenadeText));
+        }
+        else
+        {
+            HUDGrenades = Grenades;
+        }
+    }
+    ```
+- CombatComponent.h
+    ``` C++
+    private:
+        UFUNCTION()
+        void OnRep_Grenades();
+        UPROPERTY(ReplicatedUsing = OnRep_Grenades)
+        int32 Grenades = 0;
+        UPROPERTY(EditAnywhere)
+        int32 MaxGrenades = 4;
+	    void UpdateHUDGrenades();
+    public:
+        FORCEINLINE int32 GetGrenades() const { return Grenades; }
+    ```
+- CombatComponent.cpp
+    ``` C++
+    
+    void UCombatComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+    {
+        ...
+        DOREPLIFETIME(UCombatComponent, Grenades);
+    }
+
+    void UCombatComponent::ThrowGrenade()
+    {
+        if (Grenades == 0) return;
+        ...
+        if (Character && Character->HasAuthority())
+        {
+            Grenades = FMath::Clamp(Grenades - 1, 0, MaxGrenades);
+            UpdateHUDGrenades();
+        }
+    }
+    void UCombatComponent::OnRep_Grenades()
+    {
+        UpdateHUDGrenades();
+    }
+    void UCombatComponent::ServerThrowGrenade_Implementation()
+    {
+        if (Grenades == 0) return;
+        ...
+	    Grenades = FMath::Clamp(Grenades - 1, 0, MaxGrenades);
+	    UpdateHUDGrenades();
+    }
+    void UCombatComponent::UpdateHUDGrenades()
+    {
+        Controller = Controller == nullptr ? Cast<ABlasterPlayerController>(Character->Controller) : Controller;
+        if (Controller)
+        {
+            Controller->SetHUDGrenades(Grenades);
+        }
+    }
+    ```
+
+- 죽었는데 또 죽는 현상 방지
+    - BlasterCharacer.cpp
+        ``` C++
+        void ABlasterCharacter::ReceiveDamage(AActor* DamagedActor, float Damage, const UDamageType* DamageType, AController* InstigatorController, AActor* DamageCauser)
+        {
+            if (bElimned) return;
+            ...
+        }
+        ```
