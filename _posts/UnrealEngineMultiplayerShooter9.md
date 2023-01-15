@@ -1214,6 +1214,7 @@
     ``` C++
     void UCombatComponent::SwapWeapon()
     {
+	    if (CombatState != ECombatState::ECS_Unoccupied) return;    
         AWeapon* TempWeapon = EquippedWeapon;
         EquippedWeapon = SecondaryWeapon;
         SecondaryWeapon = TempWeapon;
