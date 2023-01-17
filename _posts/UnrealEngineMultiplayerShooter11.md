@@ -319,3 +319,472 @@
         }
     }
     ```
+
+## Gaining The Lead
+- 언리얼의 애셋을 FBX로 export할 수 있다.
+- BlasterCharacer.h 
+    ``` C++
+    public:
+	    UFUNCTION(NetMulticast, Reliable)
+        void MulticastGainedTheLead();
+	    UFUNCTION(NetMulticast, Reliable)
+        void MulticastLostTheLead();
+    private:
+        UPROPERTY(EditAnywhere)
+        class UNiagaraSystem* CrownSystem;
+        UPROPERTY()
+        class UNiagaraComponent* CrownComponent;
+    ```
+- BlasterCharacter.cpp
+    ``` C++
+    #include "NiagaraComponent.h"
+    #include "NiagaraFunctionLibrary.h"
+    #include "Blaster/GameState/BlasterGameState.h"
+    void ABlasterCharacter::MulticastGainedTheLead_Implementation()
+    {
+        if (CrownSystem == nullptr) return;
+        if (CrownComponent == nullptr)
+        {
+            CrownComponent = UNiagaraFunctionLibrary::SpawnSystemAttached(
+                CrownSystem,
+                GetCapsuleComponent(),
+                FName(),
+                GetMesh()->GetComponentLocation() + FVector(0.f, 0.f, 55.f),
+                GetActorRotation(),
+                EAttachLocation::KeepWorldPosition,
+                false
+            );
+        }
+        if (CrownComponent)
+        {
+            CrownComponent->Activate();
+        }
+    }
+
+    void ABlasterCharacter::MulticastLostTheLead_Implementation()
+    {
+        if (CrownComponent)
+        {
+            CrownComponent->DestroyComponent();
+        }
+    }
+    // 새로 스폰된 플레이어에게 crown을 붙이기 위함
+    void ABlasterCharacter::PollInit()
+    {
+        if (BlasterPlayerState == nullptr)
+        {
+            BlasterPlayerState = GetPlayerState<ABlasterPlayerState>();
+            if (BlasterPlayerState)
+            {
+                ...
+                ABlasterGameState* BlasterGameState = Cast<ABlasterGameState>(UGameplayStatics::GetGameState(this));
+                if (BlasterGameState && BlasterGameState->TopScoringPlayers.Contains(BlasterPlayerState))
+                {
+                    MulticastGainedTheLead();
+                }
+            }
+        }
+    }
+    void ABlasterCharacter::MulticastElim_Implementation(bool bPlayerLeftGame)
+    {
+        ...
+        if (CrownComponent)
+        {
+            CrownComponent->DestroyComponent();
+        }
+        ...
+    }
+
+    ```
+- BlasterGameMode.cpp
+    ``` C++
+    void ABlasterGameMode::PlayerEliminated(ABlasterCharacter* ElimedCharacer, ABlasterPlayerController* VictimController, ABlasterPlayerController* AttackerController)
+    {
+        ...
+        if (AttackerPlayerState && AttackerPlayerState != VictimPlayerState && BlasterGameState)
+        {
+            TArray <ABlasterPlayerState*> PlayersCurrentlyInTheLead;
+            for (auto LeadPlayer : BlasterGameState->TopScoringPlayers)
+            {
+                PlayersCurrentlyInTheLead.Add(LeadPlayer);
+            }
+            AttackerPlayerState->AddToScore(1.f);
+            BlasterGameState->UpdateTopScore(AttackerPlayerState);
+            if (BlasterGameState->TopScoringPlayers.Contains(AttackerPlayerState))
+            {
+                ABlasterCharacter* Leader = Cast<ABlasterCharacter>(AttackerPlayerState->GetPawn());
+                if (Leader)
+                {
+                    Leader->MulticastGainedTheLead();
+                }
+            }
+
+            for (int32 i = 0; i < PlayersCurrentlyInTheLead.Num(); i++)
+            {
+                if (!BlasterGameState->TopScoringPlayers.Contains(PlayersCurrentlyInTheLead[i]))
+                {
+                    ABlasterCharacter* Loser = Cast<ABlasterCharacter>(PlayersCurrentlyInTheLead[i]->GetPawn());
+                    if (Loser)
+                    {
+                        Loser->MulticastLostTheLead();
+                    }
+                }
+            }
+        }
+        ...
+    }
+    ```
+- BP_BlasterCharacter에 적절한 Crown 이펙트 추가하기
+## Elim Announcement
+- Source > Blaster > HUD 폴더에 UserWidget을 상속받는 ElimAnnouncement 클래스 생성
+- ElimAnnouncement.h
+    ``` C++
+    public:
+	    void SetElimAnnouncementText(FString AttackerName, FString VictimName);
+        UPROPERTY(meta = (BindWidget))
+            class UHorizontalBox* AnnouncementBox;
+        UPROPERTY(meta = (BindWidget))
+            class UTextBlock* AnnouncementText;
+    ```
+- ElimAnnouncement.cpp
+    ``` C++
+    #include "ElimAnnouncement.h"
+    #include "Components/TextBlock.h"
+    void UElimAnnouncement::SetElimAnnouncementText(FString AttackerName, FString VictimName)
+    {
+        FString ElimAnnouncementText = FString::Printf(TEXT("%s elimmed %s!"), *AttackerName, *VictimName);
+        if (AnnouncementText)
+        {
+            AnnouncementText->SetText(FText::FromString(ElimAnnouncementText));
+        }
+    }
+    ```
+- Blueprints > HUD 폴더에 ElimAnnouncement를 상속받는 WBP_ElimAnnouncement 생성
+    - HorizontalBox 추가(AnnouncementBox)
+    - Text추가(AnnouncementText)
+
+- BlasterHUD.h
+    ``` C++
+    public:
+	    void AddElimAnnouncement(FString Attacker, FString Victim);
+    private:
+	    UPROPERTY()
+		class APlayerController* OwningPlayer;
+    	UPROPERTY(EditAnywhere)
+		TSubclassOf<class UElimAnnouncement> ElimAnnouncementClass;
+    ```
+- BlasterHUD.cpp
+    ``` C++
+    #include "ElimAnnouncement.h"
+    void ABlasterHUD::AddElimAnnouncement(FString Attacker, FString Victim)
+    {
+        OwningPlayer = OwningPlayer == nullptr ? GetOwningPlayerController() : OwningPlayer;
+        if (OwningPlayer && ElimAnnouncementClass)
+        {
+            UElimAnnouncement* ElimAnnouncementWidget = CreateWidget<UElimAnnouncement>(OwningPlayer, ElimAnnouncementClass);
+            if (ElimAnnouncementWidget)
+            {
+                ElimAnnouncementWidget->SetElimAnnouncementText(Attacker, Victim);
+                ElimAnnouncementWidget->AddToViewport();
+            }
+        }
+    }
+    ```
+- BP_BlasterHUD에 WBP_ElimAnnouncement 설정
+
+- BlasterPlayerController.h
+    ``` C++
+    public:
+    	void BroadcastElim(APlayerState* Attacker, APlayerState* Victim);
+    protected:
+        UFUNCTION(Client, Reliable)
+        void ClientElimAnnouncement(APlayerState* Attacker, APlayerState* Victim);
+    ```
+- BlasterPlayerController.cpp
+    ``` C++
+    void ABlasterPlayerController::BroadcastElim(APlayerState* Attacker, APlayerState* Victim)
+    {
+        ClientElimAnnouncement(Attacker, Victim);
+    }
+    void ABlasterPlayerController::ClientElimAnnouncement_Implementation(APlayerState* Attacker, APlayerState* Victim)
+    {
+        APlayerState* Self = GetPlayerState<APlayerState>();
+        if (Attacker && Victim && Self)
+        {
+            BlasterHUD = BlasterHUD == nullptr ? Cast<ABlasterHUD>(GetHUD()) : BlasterHUD;
+            if (BlasterHUD)
+            {
+                if (Attacker == Self && Victim != Self)
+                {
+                    BlasterHUD->AddElimAnnouncement("You", Victim->GetPlayerName());
+                    return;
+                }
+                if (Victim == Self && Attacker != Self)
+                {
+                    BlasterHUD->AddElimAnnouncement(Attacker->GetPlayerName(), "You");
+                    return;
+                }
+                if (Attacker == Victim && Attacker == Self)
+                {
+                    BlasterHUD->AddElimAnnouncement("You", "Yourself");
+                    return;
+                }
+                if (Attacker == Victim && Attacker != Self)
+                {
+                    BlasterHUD->AddElimAnnouncement(Attacker->GetPlayerName(), "themselves");
+                    return;
+                }
+                BlasterHUD->AddElimAnnouncement(Attacker->GetPlayerName(), Victim->GetPlayerName());
+            }
+        }
+    }
+    ```
+- BlasterGameMode.cpp
+    ``` C++
+    void ABlasterGameMode::PlayerEliminated(ABlasterCharacter* ElimedCharacer, ABlasterPlayerController* VictimController, ABlasterPlayerController* AttackerController)
+    {
+        ...
+        for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; It++)
+        {
+            ABlasterPlayerController* BlasterPlayer = Cast<ABlasterPlayerController>(*It);
+            if (BlasterPlayer && AttackerPlayerState && VictimPlayerState)
+            {
+                BlasterPlayer->BroadcastElim(AttackerPlayerState, VictimPlayerState);
+            }
+        }
+    }
+    ```
+
+## Dynamic Elim Announcement
+- BlasterHUD.h
+    ``` C++
+    private:
+	    UPROPERTY(EditAnywhere)
+		float ElimAnnouncementTime = 1.5f;
+        UFUNCTION()
+        void ElimAnnouncementTimerFinished(UElimAnnouncement* MsgToRemove);
+    ```
+- BlasterHUD.cpp
+    ``` C++
+    void ABlasterHUD::AddElimAnnouncement(FString Attacker, FString Victim)
+    {
+        ...
+        if (OwningPlayer && ElimAnnouncementClass)
+        {
+            ...
+            if (ElimAnnouncementWidget)
+            {
+                ElimAnnouncementWidget->SetElimAnnouncementText(Attacker, Victim);
+                ElimAnnouncementWidget->AddToViewport();
+
+                FTimerHandle ElimMsgTimer;
+                FTimerDelegate ElimMsgDelegate;
+                ElimMsgDelegate.BindUFunction(this, FName("ElimAnnouncementTimerFinished"), ElimAnnouncementWidget);
+                GetWorldTimerManager().SetTimer(
+                    ElimMsgTimer,
+                    ElimMsgDelegate,
+                    ElimAnnouncementTime,
+                    false
+                );
+            }
+        }
+    }
+    void ABlasterHUD::ElimAnnouncementTimerFinished(UElimAnnouncement* MsgToRemove)
+    {
+        if (MsgToRemove)
+        {
+            MsgToRemove->RemoveFromParent();
+        }
+    }
+    ```
+
+- 여러개를 동시에 보여주자
+- BlasterHUD.h
+    ``` C++
+	UPROPERTY()
+	TArray<UElimAnnouncement*> ElimMessages;
+    ```
+- BlasterHUD.cpp
+    ``` C++
+    #include "Components/HorizontalBox.h"
+    #include "Components/CanvasPanelSlot.h"
+    #include "Blueprint/WidgetLayoutLibrary.h"
+    void ABlasterHUD::AddElimAnnouncement(FString Attacker, FString Victim)
+    {
+        ...
+        if (OwningPlayer && ElimAnnouncementClass)
+        {
+            ...
+            if (ElimAnnouncementWidget)
+            {
+                ElimAnnouncementWidget->SetElimAnnouncementText(Attacker, Victim);
+                ElimAnnouncementWidget->AddToViewport();
+                for (UElimAnnouncement* Msg : ElimMessages)
+                {
+                    if (Msg && Msg->AnnouncementBox)
+                    {
+                        UCanvasPanelSlot* CanvasSlot = UWidgetLayoutLibrary::SlotAsCanvasSlot(Msg->AnnouncementBox);
+                        if (CanvasSlot)
+                        {
+                            FVector2D Position = CanvasSlot->GetPosition();
+                            FVector2D NewPosition(CanvasSlot->GetPosition().X, Position.Y - CanvasSlot->GetSize().Y);
+                            CanvasSlot->SetPosition(NewPosition);
+                        }
+                    }
+                }
+                ElimMessages.Add(ElimAnnouncementWidget);
+                ...
+            }
+        }
+    }
+    ```
+
+## Head Shot
+- Weapon.h
+    ``` C++
+    protected:
+    	UPROPERTY(EditAnywhere)
+		float Damage = 20.f;
+	    UPROPERTY(EditAnywhere)
+		float HeadShotDamage = 40.f;
+	public:
+        FORCEINLINE float GetDamage() const { return Damage; }
+        FORCEINLINE float GetHeadShotDamage() const { return HeadShotDamage; }
+    ```
+- HitScanWeapon.cpp
+    ``` C++
+    void AHitScanWeapon::Fire(const FVector& HitTarget)
+    {
+        ....
+        if (MuzzleFlashSocket)
+        {
+            ...
+            if (BlasterCharacter && HasAuthority() && InstigatorController)
+            {
+                const float DamageToCause = FireHit.BoneName.ToString() == FString("head") ? HeadShotDamage : Damage;
+
+                UGameplayStatics::ApplyDamage(
+                    BlasterCharacter,
+                    DamageToCause,
+                    InstigatorController,
+                    this,
+                    UDamageType::StaticClass()
+                );
+            }
+            ...
+        }
+    }
+    void AHitScanWeapon::WeaponTraceHit(const FVector& TraceStart, const FVector& HitTarget, FHitResult& OutHit)
+    {
+        ...
+        if (World)
+        {
+            ...
+            FVector BeamEnd = End;
+            if (OutHit.bBlockingHit)
+            {
+                BeamEnd = OutHit.ImpactPoint;
+            }
+            else
+            {
+                OutHit.ImpactPoint = End;
+            }
+            ...
+        }
+    }
+    ```
+- Shotgun.cpp
+    ``` C++
+    void AShotgun::FireShotgun(const TArray<FVector_NetQuantize>& HitTargets)
+    {
+        ...
+        if (MuzzleFlashSocket)
+        {
+            ...
+            TMap<ABlasterCharacter*, uint32> HitMap;
+            TMap<ABlasterCharacter*, uint32> HeadshotHitMap;
+            for (FVector_NetQuantize HitTarget : HitTargets)
+            {
+                FHitResult FireHit;
+                WeaponTraceHit(Start, HitTarget, FireHit);
+                ABlasterCharacter* BlasterCharacter = Cast<ABlasterCharacter>(FireHit.GetActor());
+                if (BlasterCharacter)
+                {
+                    const bool bHeadShot = FireHit.BoneName.ToString() == FString("head");
+                    if (bHeadShot)
+                    {
+                        if (HeadshotHitMap.Contains(BlasterCharacter)) HeadshotHitMap[BlasterCharacter]++;
+                        else HeadshotHitMap.Emplace(BlasterCharacter, 1);
+                    }
+                    else
+                    {
+                        if (HitMap.Contains(BlasterCharacter)) HitMap[BlasterCharacter]++;
+                        else HitMap.Emplace(BlasterCharacter, 1);
+                    }
+                }
+                ...
+            }
+            TArray< ABlasterCharacter*> HitCharacters;
+            TMap<ABlasterCharacter*, float> DamageMap;
+            for (auto HitPair : HitMap)
+            {
+                if (HitPair.Key)
+                {
+                    DamageMap.Emplace(HitPair.Key, HitPair.Value * Damage);
+                    HitCharacters.AddUnique(HitPair.Key);
+                }
+            }
+            for (auto HeadshotHitPair : HeadshotHitMap)
+            {
+                if (HeadshotHitPair.Key)
+                {
+                    if (DamageMap.Contains(HeadshotHitPair.Key)) DamageMap[HeadshotHitPair.Key]+=HeadshotHitPair.Value*HeadShotDamage;
+                    else DamageMap.Emplace(HeadshotHitPair.Key, HeadshotHitPair.Value * HeadShotDamage);
+                    HitCharacters.AddUnique(HeadshotHitPair.Key);
+                }
+            }
+            for (auto DamagePair : DamageMap)
+            {
+                if (DamagePair.Key && InstigatorController)
+                {
+                    UGameplayStatics::ApplyDamage(
+                        DamagePair.Key,
+                        DamagePair.Value,
+                        InstigatorController,
+                        this,
+                        UDamageType::StaticClass()
+                    );
+                }
+            }
+        }
+    }
+
+    ```
+
+## Projectile HeadShot
+- Projectile.h
+    ``` C++
+    protected:
+    	UPROPERTY(EditAnywhere)
+		float Damage = 20.0f;
+	    UPROPERTY(EditAnywhere)
+		float HeadShotDamage = 20.0f;
+    ```
+- ProjectileBullet.cpp
+    ``` C++
+    void AProjectileBullet::OnHit(UPrimitiveComponent* HitComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, FVector NormalImpulse, const FHitResult& Hit)
+    {
+        ACharacter* OwnerCharacter = Cast<ACharacter>(GetOwner());
+        if (OwnerCharacter)
+        {
+            AController* OwnerController = OwnerCharacter->Controller;
+            if (OwnerController)
+            {
+                const float DamageToCause = Hit.BoneName.ToString() == FString("head") ? HeadShotDamage : Damage;
+
+                UGameplayStatics::ApplyDamage(OtherActor, Damage, OwnerController, this, UDamageType::StaticClass());
+            }
+        }
+        Super::OnHit(HitComp, OtherActor, OtherComp, NormalImpulse, Hit);
+    }
+    ```
